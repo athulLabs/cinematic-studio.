@@ -22,7 +22,7 @@ import {
   X,
 } from "lucide-react";
 
-import "./.css";
+import "./index.css";
 
 type Motion = "left" | "right" | "up" | "down" | "none";
 
@@ -98,23 +98,24 @@ export default function App() {
     ? clamp(time - elapsedBeforeCurrent, 0, current.duration)
     : 0;
 
+  const progress = total > 0 ? (time / total) * 100 : 0;
   // Animate camera movement from the timeline clock so scrubbing and playback match.
   const cameraProgress = current
     ? clamp(localTime / Math.max(current.duration, 0.1), 0, 1)
     : 0;
   const cameraEase = cameraProgress * cameraProgress * (3 - 2 * cameraProgress);
   const cameraX = current?.motion === "left"
-    ? 4 - cameraEase * 8
+    ? 2.5 - cameraEase * 5
     : current?.motion === "right"
-      ? -4 + cameraEase * 8
+      ? -2.5 + cameraEase * 5
       : 0;
   const cameraY = current?.motion === "up"
-    ? 4 - cameraEase * 8
+    ? 2.5 - cameraEase * 5
     : current?.motion === "down"
-      ? -4 + cameraEase * 8
+      ? -2.5 + cameraEase * 5
       : 0;
   const animatedZoom = current
-    ? 1 + (current.zoom - 1) * cameraEase
+    ? 1 + (current.zoom - 1) * 0.7 * cameraEase
     : 1;
   const animatedRotation = current ? current.rotation * cameraEase : 0;
 
@@ -124,43 +125,33 @@ export default function App() {
   };
 
   useEffect(() => {
-    if (!playing || total <= 0 || scenes.length === 0) return;
+    if (!playing || total <= 0) return;
 
     let last = performance.now();
-    let playbackTime = time;
     let frame = 0;
 
     const tick = (now: number) => {
       const delta = Math.min((now - last) / 1000, 0.1);
       last = now;
-      const next = playbackTime + delta;
 
-      if (next >= total) {
-        setTime(0);
-        setSelected(scenes[0].id);
-        setPlaying(false);
-        return;
-      }
+      setTime((previous) => {
+        const next = previous + delta;
 
-      playbackTime = next;
-      setTime(next);
-
-      // Keep the visible image in sync with the playhead as it crosses scene boundaries.
-      let cursor = 0;
-      for (const scene of scenes) {
-        if (next < cursor + scene.duration) {
-          setSelected(scene.id);
-          break;
+        if (next >= total) {
+          setPlaying(false);
+          return 0;
         }
-        cursor += scene.duration;
-      }
+
+        return next;
+      });
 
       frame = requestAnimationFrame(tick);
     };
 
     frame = requestAnimationFrame(tick);
+
     return () => cancelAnimationFrame(frame);
-  }, [playing, total, scenes]);
+  }, [playing, total]);
 
   useEffect(() => {
     if (!scenes.length) {
@@ -449,6 +440,8 @@ export default function App() {
       notify("Could not export this image");
     }
   };
+
+  const movementClass = current?.motion ?? "none";
 
   return (
     <main className="studio">
@@ -803,8 +796,8 @@ export default function App() {
                   className="range-input"
                   type="range"
                   min={1}
-                  max={2.5}
-                  step={0.05}
+                  max={2.0}
+                  step={0.02}
                   value={current.zoom}
                   onChange={(event) =>
                     updateScene({ zoom: Number(event.target.value) })
@@ -812,44 +805,50 @@ export default function App() {
                 />
               </div>
 
-              <div className="property-group">
-                <label>
-                  <Film size={13} />
-                  <span>DURATION</span>
-                  <span className="value">{current.duration}s</span>
-                </label>
-
-                <input
-                  className="range-input"
-                  type="range"
-                  min={1}
-                  max={20}
-                  step={1}
-                  value={current.duration}
-                  onChange={(event) =>
-                    updateScene({ duration: Number(event.target.value) })
-                  }
-                />
-              </div>
-
-              <div className="property-group">
-                <label>
-                  <RotateCw size={13} />
-                  <span>ROTATION</span>
-                  <span className="value">{current.rotation}°</span>
-                </label>
-
-                <input
-                  className="range-input"
-                  type="range"
-                  min={-180}
-                  max={180}
-                  step={1}
-                  value={current.rotation}
-                  onChange={(event) =>
-                    updateScene({ rotation: Number(event.target.value) })
-                  }
-                />
+              <div className="fine-controls-grid">
+                <div className="property-group">
+                  <label>
+                    <Film size={13} />
+                    <span>DURATION</span>
+                    <span className="value">{current.duration}s</span>
+                  </label>
+                  <input
+                    className="range-input"
+                    type="range"
+                    min={1}
+                    max={20}
+                    step={0.5}
+                    value={current.duration}
+                    onChange={(event) =>
+                      updateScene({ duration: Number(event.target.value) })
+                    }
+                  />
+                </div>
+                <div className="property-group">
+                  <label>
+                    <RotateCw size={13} />
+                    <span>ROTATION</span>
+                    <span className="value">{current.rotation}°</span>
+                  </label>
+                  <input
+                    className="range-input"
+                    type="range"
+                    min={-180}
+                    max={180}
+                    step={1}
+                    value={current.rotation}
+                    onChange={(event) =>
+                      updateScene({ rotation: Number(event.target.value) })
+                    }
+                  />
+                  <button
+                    className="reset-control"
+                    type="button"
+                    onClick={() => updateScene({ rotation: 0 })}
+                  >
+                    RESET TO 0°
+                  </button>
+                </div>
               </div>
 
               <div className="property-group">
