@@ -1180,3 +1180,28 @@ input[type="range"]::-moz-range-thumb {
 @media (max-width: 360px) {
   .fine-controls-grid { grid-template-columns: 1fr; gap: 0; }
 }
+
+
+/* Cinematic Studio: 3D camera and effects controls */
+.motion3d-grid,
+.effects-grid {
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+}
+.video-export-button {
+  border: 1px solid rgba(125, 153, 255, 0.38);
+  background: rgba(88, 110, 210, 0.16);
+}
+.video-export-button:disabled {
+  opacity: .65;
+  cursor: wait;
+}
+.scene-controls .scene-actions {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 8px;
+}
+@media (max-width: 520px) {
+  .scene-controls .scene-actions {
+    grid-template-columns: 1fr;
+  }
+}
