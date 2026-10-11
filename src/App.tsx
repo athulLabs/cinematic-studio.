@@ -9,7 +9,6 @@ import {
   Download,
   Type,
   Layers,
-  Sparkles,
   ZoomIn,
   MoveHorizontal,
   Film,
@@ -18,645 +17,70 @@ import {
   RotateCw,
   Maximize2,
   Clapperboard,
-  Settings2,
-  Copy,
-  ChevronDown,
-  ChevronUp,
   Check,
   X,
-  Camera,
-  Repeat,
 } from "lucide-react";
 
-type Motion =
-  | "none"
-  | "left"
-  | "right"
-  | "up"
-  | "down"
-  | "push"
-  | "pull"
-  | "orbit";
+import "./index.css";
 
-interface Scene {
+type Motion = "left" | "right" | "up" | "down" | "none";
+
+type Scene = {
   id: string;
   name: string;
   image: string;
   duration: number;
-  text: string;
-  motion: Motion;
   zoom: number;
+  motion: Motion;
   rotation: number;
-  smoothness: number;
-  brightness: number;
-  contrast: number;
+  text: string;
+  textColor: string;
   textSize: number;
-  textPosition: "top" | "center" | "bottom";
-}
+  textPosition: number;
+};
 
-interface Project {
+type Project = {
   name: string;
   scenes: Scene[];
-  version: number;
-}
+};
 
-const uid = () =>
-  globalThis.crypto?.randomUUID?.() ??
-  `${Date.now()}-${Math.random().toString(36).slice(2)}`;
+const makeId = () =>
+  `${Date.now()}-${Math.random().toString(36).slice(2, 9)}`;
 
-const clamp = (value: number, min: number, max: number) =>
-  Math.min(max, Math.max(min, value));
-
-const makeScene = (index: number): Scene => ({
-  id: uid(),
-  name: `Scene ${index + 1}`,
+const createScene = (): Scene => ({
+  id: makeId(),
+  name: "New Scene",
   image: "",
   duration: 5,
-  text: "",
-  motion: "push",
-  zoom: 1.2,
+  zoom: 1,
+  motion: "right",
   rotation: 0,
-  smoothness: 90,
-  brightness: 100,
-  contrast: 100,
+  text: "",
+  textColor: "#ffffff",
   textSize: 28,
-  textPosition: "bottom",
+  textPosition: 78,
 });
 
-const defaultProjectName = "Untitled Film";
-
-const styles = `
-:root {
-  color-scheme: dark;
-  font-family: Inter, ui-sans-serif, system-ui, -apple-system, sans-serif;
-  background: #05070d;
-  color: #e8edf6;
-  font-synthesis: none;
-}
-
-* { box-sizing: border-box; }
-
-body {
-  margin: 0;
-  min-width: 320px;
-  background: #05070d;
-}
-
-button, input, textarea, select { font: inherit; }
-button { cursor: pointer; }
-
-button:focus-visible, input:focus-visible,
-textarea:focus-visible, select:focus-visible {
-  outline: 2px solid #57d5ff;
-  outline-offset: 3px;
-}
-
-.cs-app {
-  min-height: 100vh;
-  background:
-    radial-gradient(ellipse at 50% 0%, #101b30 0%, transparent 45%),
-    #05070d;
-  padding-bottom: 35px;
-}
-
-.cs-header {
-  position: sticky;
-  top: 0;
-  z-index: 20;
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 12px;
-  padding: 15px 17px;
-  border-bottom: 1px solid #20293a;
-  background: rgba(5, 7, 13, .94);
-  backdrop-filter: blur(18px);
-}
-
-.cs-brand {
-  display: flex;
-  align-items: center;
-  gap: 11px;
-  min-width: 0;
-}
-
-.cs-logo {
-  width: 39px;
-  height: 39px;
-  flex-shrink: 0;
-  display: grid;
-  place-items: center;
-  color: #64ddff;
-  border: 1px solid #234e71;
-  border-radius: 13px;
-  background: linear-gradient(135deg, #11253d, #070c16);
-}
-
-.cs-brand h1 {
-  font-size: 13px;
-  letter-spacing: 1.2px;
-  margin: 0;
-}
-
-.cs-brand p {
-  font-size: 9px;
-  letter-spacing: 2px;
-  color: #7b8ba6;
-  margin: 5px 0 0;
-}
-
-.cs-icon-btn, .cs-btn {
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  gap: 8px;
-  border: 1px solid #303b50;
-  background: #101725;
-  color: #dce7f6;
-  border-radius: 10px;
-  padding: 10px 12px;
-}
-
-.cs-icon-btn { width: 40px; height: 40px; padding: 0; }
-
-.cs-btn.primary {
-  color: #041019;
-  border-color: #63d8ff;
-  background: #63d8ff;
-  font-weight: 800;
-}
-
-.cs-btn.danger {
-  color: #ff9aa9;
-  border-color: #633040;
-  background: #21121c;
-}
-
-.cs-btn:disabled { opacity: .35; cursor: not-allowed; }
-
-.cs-projectbar {
-  padding: 16px;
-  border-bottom: 1px solid #20293a;
-}
-
-.cs-label {
-  color: #7888a1;
-  font-size: 9px;
-  letter-spacing: 1.8px;
-  text-transform: uppercase;
-}
-
-.cs-project-title {
-  display: flex;
-  gap: 10px;
-  align-items: center;
-  margin-top: 8px;
-}
-
-.cs-project-title input {
-  flex: 1;
-  min-width: 0;
-  color: #edf4ff;
-  background: transparent;
-  border: 0;
-  font-size: 18px;
-  font-weight: 700;
-  outline: none;
-}
-
-.cs-layout {
-  width: min(100%, 1150px);
-  margin: 0 auto;
-  padding: 15px;
-  display: grid;
-  grid-template-columns: minmax(0, 1fr);
-  gap: 16px;
-}
-
-.cs-panel {
-  min-width: 0;
-  border: 1px solid #273247;
-  border-radius: 15px;
-  background: linear-gradient(150deg, #0b111d, #070b13);
-  overflow: hidden;
-}
-
-.cs-panel-head {
-  padding: 14px;
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 10px;
-  border-bottom: 1px solid #20293a;
-}
-
-.cs-panel-head h2 {
-  margin: 0;
-  font-size: 11px;
-  letter-spacing: 1.3px;
-  font-weight: 800;
-}
-
-.cs-panel-body { padding: 14px; }
-
-.cs-status {
-  display: inline-flex;
-  align-items: center;
-  gap: 7px;
-  color: #6ee7b7;
-  font-size: 9px;
-  letter-spacing: 1.2px;
-}
-
-.cs-dot {
-  width: 7px;
-  height: 7px;
-  border-radius: 50%;
-  background: #49e0a2;
-}
-
-.cs-preview-wrap {
-  padding: 12px;
-  background: radial-gradient(ellipse, #17283d, #080c15 75%);
-}
-
-.cs-preview {
-  position: relative;
-  width: min(100%, 390px);
-  aspect-ratio: 9 / 16;
-  max-height: 66vh;
-  margin: auto;
-  overflow: hidden;
-  border: 5px solid #303c51;
-  border-radius: 17px;
-  background:
-    radial-gradient(ellipse at center, #102039, #02040a 70%);
-  box-shadow: 0 15px 55px #0009;
-  isolation: isolate;
-}
-
-.cs-preview-image {
-  position: absolute;
-  inset: -10%;
-  width: 120%;
-  height: 120%;
-  object-fit: cover;
-  will-change: transform;
-}
-
-.cs-preview-shade {
-  position: absolute;
-  inset: 0;
-  background: linear-gradient(
-    to bottom,
-    rgba(0,0,0,.18),
-    transparent 30%,
-    transparent 55%,
-    rgba(0,0,0,.76)
-  );
-  pointer-events: none;
-}
-
-.cs-empty {
-  position: absolute;
-  inset: 0;
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  justify-content: center;
-  gap: 15px;
-  text-align: center;
-  padding: 24px;
-  color: #6bdfff;
-}
-
-.cs-empty strong {
-  color: #e6efff;
-  font-size: 11px;
-  letter-spacing: 1.7px;
-}
-
-.cs-empty span { color: #8494af; font-size: 12px; }
-
-.cs-scene-tag {
-  position: absolute;
-  left: 12px;
-  top: 12px;
-  background: #070c15b8;
-  color: #c7d7ed;
-  padding: 6px 8px;
-  font-size: 9px;
-  letter-spacing: 1px;
-  border: 1px solid #ffffff20;
-  border-radius: 5px;
-}
-
-.cs-overlay {
-  position: absolute;
-  z-index: 3;
-  left: 8%;
-  right: 8%;
-  color: white;
-  text-align: center;
-  font-family: Georgia, serif;
-  text-shadow: 0 3px 12px #000;
-  overflow-wrap: anywhere;
-  pointer-events: none;
-}
-
-.cs-timeline-controls {
-  padding: 13px;
-  border-top: 1px solid #222d40;
-}
-
-.cs-playrow {
-  display: flex;
-  align-items: center;
-  gap: 10px;
-}
-
-.cs-play {
-  width: 40px;
-  height: 40px;
-  border: 1px solid #236183;
-  background: #0b2033;
-  color: #63d8ff;
-  border-radius: 50%;
-  display: grid;
-  place-items: center;
-}
-
-.cs-time {
-  font-variant-numeric: tabular-nums;
-  font-size: 11px;
-  color: #9cacc3;
-}
-
-.cs-range {
-  width: 100%;
-  accent-color: #60d7ff;
-  cursor: pointer;
-}
-
-.cs-timeline-head {
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
-  margin: 20px 0 12px;
-}
-
-.cs-scene-list {
-  display: flex;
-  gap: 10px;
-  overflow-x: auto;
-  padding: 2px 1px 9px;
-}
-
-.cs-scene-card {
-  position: relative;
-  flex: 0 0 94px;
-  aspect-ratio: 3 / 4;
-  overflow: hidden;
-  padding: 0;
-  border: 1px solid #344056;
-  border-radius: 10px;
-  background: #0a1120;
-}
-
-.cs-scene-card.active {
-  border: 2px solid #5bd9ff;
-  box-shadow: 0 0 0 2px #5bd9ff22;
-}
-
-.cs-scene-card img {
-  width: 100%;
-  height: 100%;
-  object-fit: cover;
-}
-
-.cs-scene-card .cs-thumb-empty {
-  height: 100%;
-  display: grid;
-  place-items: center;
-  color: #64748b;
-}
-
-.cs-thumb-number, .cs-thumb-duration {
-  position: absolute;
-  padding: 4px 5px;
-  background: #050a13cc;
-  color: #e6efff;
-  border-radius: 4px;
-  font-size: 9px;
-}
-
-.cs-thumb-number { top: 5px; left: 5px; }
-.cs-thumb-duration { bottom: 5px; right: 5px; }
-
-.cs-add-card {
-  flex: 0 0 94px;
-  aspect-ratio: 3 / 4;
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  justify-content: center;
-  gap: 8px;
-  color: #67dfff;
-  border: 1px dashed #344761;
-  border-radius: 10px;
-  background: #0a1120;
-  font-size: 9px;
-  letter-spacing: .8px;
-}
-
-.cs-tool-tabs {
-  display: grid;
-  grid-template-columns: repeat(3, 1fr);
-  gap: 6px;
-  padding: 10px;
-  border-bottom: 1px solid #20293a;
-}
-
-.cs-tab {
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  flex-direction: column;
-  gap: 7px;
-  padding: 12px 3px;
-  border: 1px solid transparent;
-  background: transparent;
-  color: #8594ac;
-  border-radius: 9px;
-  font-size: 10px;
-}
-
-.cs-tab.active {
-  color: #64dcff;
-  border-color: #244c6b;
-  background: #102237;
-}
-
-.cs-field { margin-bottom: 20px; }
-.cs-field:last-child { margin-bottom: 0; }
-
-.cs-field label {
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
-  gap: 8px;
-  margin-bottom: 10px;
-  color: #9aabc4;
-  font-size: 9px;
-  letter-spacing: 1.1px;
-  text-transform: uppercase;
-}
-
-.cs-field input[type="text"],
-.cs-field input[type="number"],
-.cs-field textarea,
-.cs-field select {
-  width: 100%;
-  color: #e5edf9;
-  background: #0c1321;
-  border: 1px solid #303d54;
-  border-radius: 9px;
-  padding: 12px;
-  font-size: 12px;
-}
-
-.cs-field textarea { resize: vertical; min-height: 95px; }
-.cs-field input[type="range"] { width: 100%; accent-color: #60d7ff; }
-
-.cs-motion-grid {
-  display: grid;
-  grid-template-columns: repeat(2, minmax(0, 1fr));
-  gap: 8px;
-}
-
-.cs-motion {
-  min-height: 42px;
-  padding: 9px 5px;
-  border: 1px solid #303d54;
-  border-radius: 9px;
-  color: #a9b8ce;
-  background: #121a29;
-  font-size: 10px;
-}
-
-.cs-motion.active {
-  color: #64dcff;
-  border-color: #2b789c;
-  background: #10263a;
-}
-
-.cs-divider {
-  height: 1px;
-  background: #222d40;
-  margin: 20px 0;
-}
-
-.cs-engine {
-  padding: 14px;
-  border: 1px solid #303e52;
-  border-radius: 11px;
-  background: #060b13;
-}
-
-.cs-engine strong {
-  display: block;
-  margin: 10px 0 7px;
-  color: #55e2a7;
-  font-size: 13px;
-  letter-spacing: 1px;
-}
-
-.cs-engine p {
-  margin: 0;
-  color: #7889a3;
-  font-size: 9px;
-  letter-spacing: 1px;
-}
-
-.cs-message {
-  position: fixed;
-  z-index: 100;
-  bottom: 20px;
-  left: 50%;
-  transform: translateX(-50%);
-  width: max-content;
-  max-width: calc(100% - 30px);
-  padding: 12px 17px;
-  border: 1px solid #33526a;
-  border-radius: 11px;
-  background: #101e30;
-  color: #dff6ff;
-  box-shadow: 0 8px 35px #0009;
-  font-size: 12px;
-}
-
-.cs-footer {
-  display: flex;
-  justify-content: space-between;
-  gap: 8px;
-  padding: 15px;
-  color: #65758e;
-  font-size: 8px;
-  letter-spacing: 1px;
-  border-top: 1px solid #20293a;
-}
-
-.cs-button-row {
-  display: flex;
-  gap: 8px;
-  flex-wrap: wrap;
-}
-
-.cs-button-row > button { flex: 1; }
-
-@media (min-width: 850px) {
-  .cs-layout {
-    grid-template-columns: minmax(0, 1.25fr) minmax(320px, .75fr);
-    align-items: start;
-  }
-
-  .cs-editor { position: sticky; top: 86px; }
-
-  .cs-preview { max-height: 70vh; }
-
-  .cs-projectbar {
-    display: flex;
-    align-items: center;
-    justify-content: space-between;
-    gap: 20px;
-  }
-}
-
-@media (max-width: 380px) {
-  .cs-header { padding: 12px; }
-  .cs-brand h1 { font-size: 11px; }
-  .cs-layout { padding: 9px; gap: 10px; }
-  .cs-panel-body { padding: 11px; }
-  .cs-preview-wrap { padding: 8px; }
-}
-`;
+const clamp = (value: number, min: number, max: number) =>
+  Math.max(min, Math.min(max, value));
 
 export default function App() {
+  const [projectName, setProjectName] = useState("Untitled Film");
   const [scenes, setScenes] = useState<Scene[]>([]);
   const [selected, setSelected] = useState("");
   const [playing, setPlaying] = useState(false);
   const [time, setTime] = useState(0);
-  const [projectName, setProjectName] = useState(defaultProjectName);
   const [activeTab, setActiveTab] = useState<
-    "scenes" | "typography" | "motion"
+    "scenes" | "typography" | "import"
   >("scenes");
   const [notice, setNotice] = useState("");
-  const [loop, setLoop] = useState(false);
-  const [showSettings, setShowSettings] = useState(false);
+  const [showText, setShowText] = useState(true);
+  const [ratio, setRatio] = useState<"portrait" | "landscape" | "square">(
+    "portrait"
+  );
 
   const fileRef = useRef<HTMLInputElement>(null);
   const projectRef = useRef<HTMLInputElement>(null);
-  const noticeTimer = useRef<number | undefined>(undefined);
 
   const current = scenes.find((scene) => scene.id === selected);
 
@@ -665,25 +89,20 @@ export default function App() {
     0
   );
 
-  const showNotice = (message: string) => {
+  const elapsedBeforeCurrent = scenes
+    .slice(0, Math.max(0, scenes.findIndex((s) => s.id === selected)))
+    .reduce((sum, scene) => sum + scene.duration, 0);
+
+  const localTime = current
+    ? clamp(time - elapsedBeforeCurrent, 0, current.duration)
+    : 0;
+
+  const progress = total > 0 ? (time / total) * 100 : 0;
+
+  const notify = (message: string) => {
     setNotice(message);
-
-    if (noticeTimer.current !== undefined) {
-      window.clearTimeout(noticeTimer.current);
-    }
-
-    noticeTimer.current = window.setTimeout(() => {
-      setNotice("");
-    }, 2600);
+    window.setTimeout(() => setNotice(""), 2600);
   };
-
-  useEffect(() => {
-    return () => {
-      if (noticeTimer.current !== undefined) {
-        window.clearTimeout(noticeTimer.current);
-      }
-    };
-  }, []);
 
   useEffect(() => {
     if (!playing || total <= 0) return;
@@ -692,18 +111,15 @@ export default function App() {
     let frame = 0;
 
     const tick = (now: number) => {
-      const delta = (now - last) / 1000;
+      const delta = Math.min((now - last) / 1000, 0.1);
       last = now;
 
       setTime((previous) => {
         const next = previous + delta;
 
         if (next >= total) {
-          if (loop) {
-            return next % total;
-          }
-
-          return total;
+          setPlaying(false);
+          return 0;
         }
 
         return next;
@@ -715,146 +131,186 @@ export default function App() {
     frame = requestAnimationFrame(tick);
 
     return () => cancelAnimationFrame(frame);
-  }, [playing, total, loop]);
+  }, [playing, total]);
 
   useEffect(() => {
-    if (playing && total > 0 && time >= total && !loop) {
+    if (!scenes.length) {
+      setSelected("");
+      setTime(0);
       setPlaying(false);
+      return;
     }
-  }, [time, total, playing, loop]);
 
-  const addScene = () => {
-    const scene = makeScene(scenes.length);
-
-    setScenes((previous) => [...previous, scene]);
-    setSelected(scene.id);
-    setTime(0);
-    setPlaying(false);
-    showNotice("New scene created");
-  };
+    if (!scenes.some((scene) => scene.id === selected)) {
+      setSelected(scenes[0].id);
+    }
+  }, [scenes, selected]);
 
   const updateScene = (patch: Partial<Scene>) => {
     if (!current) return;
 
-    setScenes((previous) =>
-      previous.map((scene) =>
-        scene.id === current.id
-          ? { ...scene, ...patch }
-          : scene
+    setScenes((old) =>
+      old.map((scene) =>
+        scene.id === current.id ? { ...scene, ...patch } : scene
       )
     );
   };
 
+  const addScene = () => {
+    const scene = createScene();
+
+    setScenes((old) => [...old, scene]);
+    setSelected(scene.id);
+    setPlaying(false);
+    setTime(total);
+
+    notify("Scene created");
+  };
+
   const deleteScene = () => {
     if (!current) return;
-
-    const index = scenes.findIndex(
-      (scene) => scene.id === current.id
-    );
 
     const remaining = scenes.filter(
       (scene) => scene.id !== current.id
     );
 
     setScenes(remaining);
-    setSelected(
-      remaining[Math.min(index, remaining.length - 1)]?.id ?? ""
-    );
-    setTime(0);
+    setSelected(remaining[0]?.id ?? "");
     setPlaying(false);
-    showNotice("Scene deleted");
+    setTime(0);
+
+    notify("Scene deleted");
   };
 
-  const duplicateScene = () => {
-    if (!current) return;
+  const importImages = async (files: FileList | null) => {
+    if (!files?.length) return;
 
-    const copy: Scene = {
-      ...current,
-      id: uid(),
-      name: `${current.name} Copy`,
-    };
-
-    const index = scenes.findIndex(
-      (scene) => scene.id === current.id
-    );
-
-    const next = [...scenes];
-    next.splice(index + 1, 0, copy);
-
-    setScenes(next);
-    setSelected(copy.id);
-    showNotice("Scene duplicated");
-  };
-
-  const importImages = async (
-    event: React.ChangeEvent<HTMLInputElement>
-  ) => {
-    const files = Array.from(event.target.files ?? []);
-
-    if (!files.length) return;
-
-    const validFiles = files.filter((file) =>
+    const imageFiles = Array.from(files).filter((file) =>
       file.type.startsWith("image/")
     );
 
-    if (!validFiles.length) {
-      showNotice("Choose image files");
-      event.target.value = "";
+    if (!imageFiles.length) {
+      notify("Please select image files");
       return;
     }
 
     const imported: Scene[] = [];
 
-    for (const file of validFiles) {
-      const image = await new Promise<string>(
-        (resolve, reject) => {
-          const reader = new FileReader();
+    for (const file of imageFiles) {
+      const image = await new Promise<string>((resolve, reject) => {
+        const reader = new FileReader();
 
-          reader.onload = () =>
-            typeof reader.result === "string"
-              ? resolve(reader.result)
-              : reject(new Error("Image could not be read"));
+        reader.onload = () => resolve(String(reader.result));
+        reader.onerror = () => reject(new Error("Image import failed"));
 
-          reader.onerror = () =>
-            reject(new Error("Image could not be read"));
+        reader.readAsDataURL(file);
+      }).catch(() => "");
 
-          reader.readAsDataURL(file);
-        }
-      ).catch(() => "");
+      if (!image) continue;
 
-      if (image) {
-        imported.push({
-          ...makeScene(scenes.length + imported.length),
-          name: file.name.replace(/\.[^.]+$/, ""),
-          image,
-        });
-      }
+      imported.push({
+        ...createScene(),
+        name: file.name.replace(/\.[^.]+$/, ""),
+        image,
+      });
     }
 
-    if (imported.length) {
-      setScenes((previous) => [...previous, ...imported]);
-      setSelected(imported[0].id);
-      setTime(0);
-      setPlaying(false);
-      showNotice(`${imported.length} image scene(s) imported`);
+    if (!imported.length) {
+      notify("Unable to import images");
+      return;
     }
 
-    event.target.value = "";
+    setScenes((old) => [...old, ...imported]);
+    setSelected(imported[0].id);
+    setActiveTab("scenes");
+    setPlaying(false);
+    setTime(0);
+
+    notify(`${imported.length} image(s) imported`);
   };
 
-  const seekTo = (seconds: number) => {
-    const next = clamp(seconds, 0, total);
+  const saveProject = () => {
+    const project: Project = {
+      name: projectName,
+      scenes,
+    };
+
+    try {
+      const blob = new Blob(
+        [JSON.stringify(project, null, 2)],
+        { type: "application/json" }
+      );
+
+      const url = URL.createObjectURL(blob);
+      const anchor = document.createElement("a");
+
+      anchor.href = url;
+      anchor.download = `${projectName || "cinematic-project"}.json`;
+      anchor.click();
+
+      URL.revokeObjectURL(url);
+
+      notify("Project exported");
+    } catch {
+      notify("Unable to export project");
+    }
+  };
+
+  const openProject = async (file: File) => {
+    try {
+      const project = JSON.parse(await file.text()) as Project;
+
+      if (!Array.isArray(project.scenes)) {
+        throw new Error("Invalid project");
+      }
+
+      const validScenes = project.scenes.filter(
+        (scene) =>
+          typeof scene.id === "string" &&
+          typeof scene.image === "string" &&
+          typeof scene.duration === "number"
+      );
+
+      setProjectName(project.name || "Imported Film");
+      setScenes(validScenes);
+      setSelected(validScenes[0]?.id ?? "");
+      setTime(0);
+      setPlaying(false);
+
+      notify("Project opened");
+    } catch {
+      notify("Invalid project file");
+    }
+  };
+
+  const jumpToScene = (sceneId: string) => {
+    const index = scenes.findIndex((scene) => scene.id === sceneId);
+
+    if (index < 0) return;
+
+    const start = scenes
+      .slice(0, index)
+      .reduce((sum, scene) => sum + scene.duration, 0);
+
+    setSelected(sceneId);
+    setTime(start);
+    setPlaying(false);
+  };
+
+  const seek = (value: number) => {
+    const next = clamp(value, 0, total);
+
     setTime(next);
 
-    let elapsed = 0;
+    let cursor = 0;
 
     for (const scene of scenes) {
-      if (next < elapsed + scene.duration) {
+      if (next < cursor + scene.duration) {
         setSelected(scene.id);
         return;
       }
 
-      elapsed += scene.duration;
+      cursor += scene.duration;
     }
 
     if (scenes.length) {
@@ -862,962 +318,661 @@ export default function App() {
     }
   };
 
-  const togglePlayback = () => {
-    if (!scenes.length || total <= 0) {
-      showNotice("Add a scene before playing");
+  const exportCurrentFrame = async () => {
+    if (!current?.image) {
+      notify("Import an image first");
       return;
     }
-
-    if (playing) {
-      setPlaying(false);
-      return;
-    }
-
-    if (time >= total) setTime(0);
-
-    setPlaying(true);
-  };
-
-  const saveProject = () => {
-    const project: Project = {
-      name: projectName,
-      scenes,
-      version: 1,
-    };
-
-    const blob = new Blob(
-      [JSON.stringify(project, null, 2)],
-      { type: "application/json" }
-    );
-
-    const url = URL.createObjectURL(blob);
-    const anchor = document.createElement("a");
-
-    anchor.href = url;
-    anchor.download =
-      `${projectName.trim().replace(/[^\w-]+/g, "-") || "cinematic-project"}.json`;
-
-    anchor.click();
-    URL.revokeObjectURL(url);
-
-    showNotice("Project JSON downloaded");
-  };
-
-  const loadProject = async (
-    event: React.ChangeEvent<HTMLInputElement>
-  ) => {
-    const file = event.target.files?.[0];
-
-    if (!file) return;
 
     try {
-      const project = JSON.parse(
-        await file.text()
-      ) as Project;
+      const image = new Image();
+      image.src = current.image;
 
-      if (
-        !project ||
-        !Array.isArray(project.scenes) ||
-        !project.scenes.every(
-          (scene) =>
-            typeof scene.id === "string" &&
-            typeof scene.duration === "number"
-        )
-      ) {
-        throw new Error("Invalid project");
+      await new Promise<void>((resolve, reject) => {
+        image.onload = () => resolve();
+        image.onerror = () => reject();
+      });
+
+      const canvas = document.createElement("canvas");
+
+      const width = ratio === "portrait" ? 1080 : 1920;
+      const height = ratio === "landscape" ? 1080 : ratio === "square" ? 1080 : 1920;
+
+      canvas.width = width;
+      canvas.height = height;
+
+      const ctx = canvas.getContext("2d");
+
+      if (!ctx) throw new Error("Canvas unavailable");
+
+      ctx.fillStyle = "#050811";
+      ctx.fillRect(0, 0, width, height);
+
+      const zoom = current.zoom;
+      const scale = Math.max(
+        width / image.naturalWidth,
+        height / image.naturalHeight
+      ) * zoom;
+
+      const drawWidth = image.naturalWidth * scale;
+      const drawHeight = image.naturalHeight * scale;
+
+      const movement = current.motion === "left"
+        ? -localTime / Math.max(current.duration, 0.1)
+        : current.motion === "right"
+          ? localTime / Math.max(current.duration, 0.1)
+          : 0;
+
+      const offsetX = (width - drawWidth) / 2 - movement * width * 0.12;
+      const offsetY = (height - drawHeight) / 2;
+
+      ctx.save();
+      ctx.translate(width / 2, height / 2);
+      ctx.rotate((current.rotation * Math.PI) / 180);
+      ctx.translate(-width / 2, -height / 2);
+
+      ctx.drawImage(
+        image,
+        offsetX,
+        offsetY,
+        drawWidth,
+        drawHeight
+      );
+
+      ctx.restore();
+
+      const gradient = ctx.createLinearGradient(0, height * 0.5, 0, height);
+      gradient.addColorStop(0, "rgba(0,0,0,0)");
+      gradient.addColorStop(1, "rgba(0,0,0,.65)");
+
+      ctx.fillStyle = gradient;
+      ctx.fillRect(0, 0, width, height);
+
+      if (showText && current.text) {
+        ctx.fillStyle = current.textColor;
+        ctx.textAlign = "center";
+        ctx.font = `600 ${current.textSize * (height / 800)}px Arial`;
+        ctx.fillText(
+          current.text,
+          width / 2,
+          height * (current.textPosition / 100),
+          width * 0.85
+        );
       }
 
-      setScenes(project.scenes);
-      setSelected(project.scenes[0]?.id ?? "");
-      setProjectName(project.name || defaultProjectName);
-      setTime(0);
-      setPlaying(false);
-      showNotice("Project loaded successfully");
+      canvas.toBlob((blob) => {
+        if (!blob) {
+          notify("Frame export failed");
+          return;
+        }
+
+        const url = URL.createObjectURL(blob);
+        const anchor = document.createElement("a");
+
+        anchor.href = url;
+        anchor.download = `${current.name || "cinematic-frame"}.png`;
+        anchor.click();
+
+        URL.revokeObjectURL(url);
+        notify("PNG frame exported");
+      }, "image/png");
     } catch {
-      showNotice("Invalid project file");
+      notify("Could not export this image");
     }
-
-    event.target.value = "";
   };
 
-  const exportFrame = () => {
-    const preview = document.querySelector(
-      ".cs-preview"
-    ) as HTMLElement | null;
-
-    if (!preview) return;
-
-    showNotice(
-      "Use your browser screenshot tool to capture the preview"
-    );
-  };
-
-  const motionTransform = (() => {
-    if (!current) return "scale(1)";
-
-    const zoom = current.zoom;
-
-    switch (current.motion) {
-      case "left":
-        return `translateX(-3%) scale(${zoom})`;
-      case "right":
-        return `translateX(3%) scale(${zoom})`;
-      case "up":
-        return `translateY(-3%) scale(${zoom})`;
-      case "down":
-        return `translateY(3%) scale(${zoom})`;
-      case "pull":
-        return `scale(${1 + (zoom - 1) * 0.4})`;
-      case "orbit":
-        return `rotate(${current.rotation}deg) scale(${zoom})`;
-      case "push":
-        return `scale(${zoom})`;
-      default:
-        return `scale(1)`;
-    }
-  })();
-
-  const imageStyle: React.CSSProperties = {
-    transform: motionTransform,
-    filter: current
-      ? `brightness(${current.brightness}%) contrast(${current.contrast}%)`
-      : "none",
-    transition: `transform ${Math.max(
-      0.2,
-      current?.smoothness ?? 90
-    ) / 100}s ease-in-out`,
-  };
-
-  const textPositionStyle: React.CSSProperties = {
-    top:
-      current?.textPosition === "top"
-        ? "12%"
-        : current?.textPosition === "center"
-          ? "45%"
-          : "auto",
-    bottom:
-      current?.textPosition === "bottom"
-        ? "10%"
-        : "auto",
-    fontSize: `${current?.textSize ?? 28}px`,
-  };
+  const movementClass = current?.motion ?? "none";
 
   return (
-    <>
-      <style>{styles}</style>
+    <main className="studio">
+      <header className="cs-header">
+        <div className="cs-brand">
+          <div className="cs-logo">
+            <Aperture size={22} />
+          </div>
 
-      <div className="cs-app">
-        <header className="cs-header">
-          <div className="cs-brand">
-            <div className="cs-logo">
-              <Aperture size={24} />
-            </div>
+          <div className="brand-copy">
+            <strong>CINEMATIC STUDIO</strong>
+            <span>CREATIVE MOTION ENGINE</span>
+          </div>
+        </div>
 
+        <button
+          className="icon-button"
+          onClick={addScene}
+          aria-label="Add scene"
+        >
+          <Plus size={21} />
+        </button>
+      </header>
+
+      <section className="project-bar">
+        <div className="project-meta">
+          <span className="eyebrow">PROJECT / 001</span>
+
+          <input
+            className="project-name"
+            value={projectName}
+            onChange={(event) => setProjectName(event.target.value)}
+            aria-label="Project name"
+          />
+        </div>
+
+        <div className="project-actions">
+          <button className="primary-button" onClick={saveProject}>
+            <Save size={15} />
+            <span>SAVE PROJECT</span>
+          </button>
+
+          <button
+            className="icon-button"
+            onClick={() => projectRef.current?.click()}
+            aria-label="Open project"
+          >
+            <Upload size={17} />
+          </button>
+
+          <input
+            ref={projectRef}
+            type="file"
+            accept=".json,application/json"
+            hidden
+            onChange={(event) => {
+              const file = event.target.files?.[0];
+
+              if (file) void openProject(file);
+
+              event.target.value = "";
+            }}
+          />
+        </div>
+      </section>
+
+      <div className="workspace">
+        <aside className="sidebar">
+          <button
+            className={activeTab === "scenes" ? "nav-item active" : "nav-item"}
+            onClick={() => setActiveTab("scenes")}
+          >
+            <Layers size={19} />
+            <span>Scenes</span>
+          </button>
+
+          <button
+            className={
+              activeTab === "typography" ? "nav-item active" : "nav-item"
+            }
+            onClick={() => setActiveTab("typography")}
+          >
+            <Type size={19} />
+            <span>Type</span>
+          </button>
+
+          <button
+            className={activeTab === "import" ? "nav-item active" : "nav-item"}
+            onClick={() => {
+              setActiveTab("import");
+              fileRef.current?.click();
+            }}
+          >
+            <ImagePlus size={19} />
+            <span>Import</span>
+          </button>
+        </aside>
+
+        <section className="editor">
+          <div className="section-heading">
             <div>
-              <h1>CINEMATIC STUDIO</h1>
-              <p>CREATIVE MOTION ENGINE</p>
-            </div>
-          </div>
-
-          <div className="cs-button-row">
-            <button
-              className="cs-icon-btn"
-              title="Import images"
-              onClick={() => fileRef.current?.click()}
-            >
-              <Plus size={21} />
-            </button>
-
-            <button
-              className="cs-icon-btn"
-              title="Project settings"
-              onClick={() => setShowSettings(!showSettings)}
-            >
-              <Settings2 size={20} />
-            </button>
-          </div>
-        </header>
-
-        <section className="cs-projectbar">
-          <div>
-            <div className="cs-label">
-              Project / {String(scenes.length).padStart(3, "0")}
+              <span className="eyebrow">LIVE COMPOSITION</span>
+              <h1>Cinematic Preview</h1>
             </div>
 
-            <div className="cs-project-title">
-              <input
-                value={projectName}
-                onChange={(event) =>
-                  setProjectName(event.target.value)
-                }
-                aria-label="Project name"
-                maxLength={100}
-              />
-            </div>
-          </div>
-
-          <div className="cs-button-row">
-            <button className="cs-btn primary" onClick={saveProject}>
-              <Save size={15} />
-              Save Project
-            </button>
-
-            <button
-              className="cs-btn"
-              onClick={() => projectRef.current?.click()}
+            <select
+              className="ratio-select"
+              value={ratio}
+              onChange={(event) =>
+                setRatio(event.target.value as typeof ratio)
+              }
+              aria-label="Canvas ratio"
             >
-              <Upload size={15} />
-              Load
-            </button>
+              <option value="portrait">9:16 / VERTICAL</option>
+              <option value="landscape">16:9 / LANDSCAPE</option>
+              <option value="square">1:1 / SQUARE</option>
+            </select>
           </div>
-        </section>
 
-        <div className="cs-layout">
-          <main className="cs-panel">
-            <div className="cs-panel-head">
-              <h2>
-                <Aperture
-                  size={14}
-                  style={{ verticalAlign: "middle", marginRight: 7 }}
+          <div className={`preview-shell ratio-${ratio}`}>
+            {current?.image ? (
+              <div className="preview-stage">
+                <img
+                  key={current.id}
+                  className={`preview-image motion-${movementClass}`}
+                  src={current.image}
+                  alt={current.name}
+                  style={{
+                    transform: `scale(${current.zoom}) rotate(${current.rotation}deg)`,
+                    animationDuration: `${Math.max(current.duration, 0.1)}s`,
+                    animationPlayState: playing ? "running" : "paused",
+                  }}
                 />
-                LIVE COMPOSITION
-              </h2>
 
-              <span className="cs-label">9:16 / VERTICAL</span>
-            </div>
+                <div className="preview-vignette" />
 
-            <div className="cs-preview-wrap">
-              <div className="cs-preview">
-                {current?.image ? (
-                  <img
-                    className="cs-preview-image"
-                    src={current.image}
-                    alt={current.name}
-                    style={imageStyle}
-                  />
-                ) : null}
+                <div className="preview-label">
+                  SCENE {String(scenes.findIndex(s => s.id === selected) + 1).padStart(2, "0")}
+                </div>
 
-                {!current?.image && (
-                  <div className="cs-empty">
-                    <ImagePlus size={44} />
-
-                    <strong>
-                      {current
-                        ? "IMPORT AN IMAGE"
-                        : "CREATE YOUR FIRST SCENE"}
-                    </strong>
-
-                    <span>
-                      {current
-                        ? "Choose an image to animate"
-                        : "Import an image to begin"}
-                    </span>
-
-                    <button
-                      className="cs-btn primary"
-                      onClick={() => fileRef.current?.click()}
-                    >
-                      <Upload size={15} />
-                      Import Image
-                    </button>
+                {showText && current.text && (
+                  <div
+                    className="preview-caption"
+                    style={{
+                      color: current.textColor,
+                      fontSize: `clamp(14px, ${current.textSize / 4}vw, ${current.textSize}px)`,
+                      top: `${current.textPosition}%`,
+                    }}
+                  >
+                    {current.text}
                   </div>
                 )}
 
-                {current?.image && (
-                  <>
-                    <div className="cs-preview-shade" />
-
-                    <div className="cs-scene-tag">
-                      {current.name.toUpperCase()}
-                    </div>
-
-                    {current.text && (
-                      <div
-                        className="cs-overlay"
-                        style={textPositionStyle}
-                      >
-                        {current.text}
-                      </div>
-                    )}
-                  </>
-                )}
+                <div className="camera-readout">
+                  {current.zoom.toFixed(2)}×
+                </div>
               </div>
-            </div>
-
-            <div className="cs-timeline-controls">
-              <div className="cs-playrow">
-                <button
-                  className="cs-play"
-                  onClick={togglePlayback}
-                  aria-label={playing ? "Pause" : "Play"}
-                >
-                  {playing ? (
-                    <Pause size={17} />
-                  ) : (
-                    <Play size={17} />
-                  )}
-                </button>
-
-                <span className="cs-time">
-                  {time.toFixed(1)}s
-                </span>
-
-                <input
-                  className="cs-range"
-                  type="range"
-                  min="0"
-                  max={Math.max(total, 0.1)}
-                  step="0.1"
-                  value={Math.min(time, total)}
-                  onChange={(event) =>
-                    seekTo(Number(event.target.value))
-                  }
-                  aria-label="Timeline position"
-                />
-
-                <span className="cs-time">
-                  {total.toFixed(1)}s
-                </span>
-              </div>
-
-              <div className="cs-timeline-head">
-                <div>
-                  <Film
-                    size={13}
-                    style={{ verticalAlign: "middle", marginRight: 6 }}
-                  />
-                  <span className="cs-label">Timeline</span>
-                  <span className="cs-label" style={{ marginLeft: 8 }}>
-                    {scenes.length} scenes
-                  </span>
+            ) : (
+              <button
+                className="empty-preview"
+                onClick={() => fileRef.current?.click()}
+              >
+                <div className="empty-icon">
+                  <ImagePlus size={33} />
                 </div>
 
-                <button
-                  className="cs-btn"
-                  onClick={addScene}
-                  style={{ padding: "7px 10px" }}
-                >
-                  <Plus size={14} />
-                  Add
-                </button>
+                <strong>CREATE YOUR FIRST SCENE</strong>
+                <span>Import an image to begin</span>
+
+                <span className="empty-action">
+                  <Upload size={15} /> IMPORT IMAGE
+                </span>
+              </button>
+            )}
+          </div>
+
+          <input
+            ref={fileRef}
+            type="file"
+            accept="image/*"
+            multiple
+            hidden
+            onChange={(event) => {
+              void importImages(event.target.files);
+              event.target.value = "";
+            }}
+          />
+
+          <div className="transport">
+            <button
+              className="play-button"
+              onClick={() => {
+                if (!scenes.length) {
+                  fileRef.current?.click();
+                  return;
+                }
+
+                if (time >= total) setTime(0);
+
+                setPlaying((value) => !value);
+              }}
+              aria-label={playing ? "Pause" : "Play"}
+            >
+              {playing ? <Pause size={17} /> : <Play size={17} />}
+            </button>
+
+            <span className="time-readout">
+              {time.toFixed(1)}s
+            </span>
+
+            <input
+              className="transport-slider"
+              type="range"
+              min={0}
+              max={Math.max(total, 0.1)}
+              step={0.05}
+              value={Math.min(time, total)}
+              onChange={(event) => seek(Number(event.target.value))}
+              aria-label="Timeline position"
+            />
+
+            <span className="time-total">
+              {total.toFixed(1)}s
+            </span>
+          </div>
+
+          <section className="timeline">
+            <div className="timeline-heading">
+              <div className="heading-left">
+                <Film size={15} />
+                <span>TIMELINE</span>
+                <span className="count-badge">
+                  {scenes.length} SCENES
+                </span>
               </div>
 
-              <div className="cs-scene-list">
+              <button className="small-button" onClick={addScene}>
+                <Plus size={15} /> ADD
+              </button>
+            </div>
+
+            {scenes.length ? (
+              <div className="scene-strip">
                 {scenes.map((scene, index) => (
                   <button
                     key={scene.id}
-                    className={`cs-scene-card ${
-                      scene.id === selected ? "active" : ""
-                    }`}
-                    onClick={() => {
-                      setSelected(scene.id);
-                      setPlaying(false);
-
-                      let start = 0;
-
-                      for (let i = 0; i < index; i++) {
-                        start += scenes[i].duration;
-                      }
-
-                      setTime(start);
-                    }}
-                    aria-label={`Select ${scene.name}`}
+                    className={
+                      scene.id === selected
+                        ? "scene-card selected"
+                        : "scene-card"
+                    }
+                    onClick={() => jumpToScene(scene.id)}
                   >
-                    {scene.image ? (
-                      <img src={scene.image} alt="" />
-                    ) : (
-                      <div className="cs-thumb-empty">
-                        <ImagePlus size={25} />
-                      </div>
-                    )}
+                    <div className="scene-thumbnail">
+                      {scene.image ? (
+                        <img src={scene.image} alt="" />
+                      ) : (
+                        <ImagePlus size={23} />
+                      )}
 
-                    <span className="cs-thumb-number">
-                      {String(index + 1).padStart(2, "0")}
-                    </span>
+                      <span className="scene-index">
+                        {String(index + 1).padStart(2, "0")}
+                      </span>
 
-                    <span className="cs-thumb-duration">
-                      {scene.duration}s
+                      <span className="scene-duration">
+                        {scene.duration}s
+                      </span>
+                    </div>
+
+                    <span className="scene-card-name">
+                      {scene.name}
                     </span>
                   </button>
                 ))}
 
                 <button
-                  className="cs-add-card"
+                  className="import-scene-card"
                   onClick={() => fileRef.current?.click()}
                 >
-                  <Plus size={24} />
-                  IMPORT SCENE
+                  <Plus size={22} />
+                  <span>IMPORT SCENE</span>
                 </button>
               </div>
-            </div>
-          </main>
-
-          <aside className="cs-panel cs-editor">
-            <div className="cs-tool-tabs">
+            ) : (
               <button
-                className={`cs-tab ${
-                  activeTab === "scenes" ? "active" : ""
-                }`}
-                onClick={() => setActiveTab("scenes")}
+                className="timeline-empty"
+                onClick={() => fileRef.current?.click()}
               >
-                <Layers size={20} />
-                Scenes
+                <Plus size={20} />
+                IMPORT YOUR FIRST IMAGE
               </button>
+            )}
+          </section>
 
-              <button
-                className={`cs-tab ${
-                  activeTab === "typography" ? "active" : ""
-                }`}
-                onClick={() => setActiveTab("typography")}
-              >
-                <Type size={20} />
-                Typography
-              </button>
+          {current && (
+            <section className="scene-controls">
+              <div className="controls-heading">
+                <SparkleIcon />
+                <span>SCENE CONTROLS</span>
+              </div>
 
-              <button
-                className={`cs-tab ${
-                  activeTab === "motion" ? "active" : ""
-                }`}
-                onClick={() => setActiveTab("motion")}
-              >
-                <Sparkles size={20} />
-                Motion
-              </button>
-            </div>
+              <div className="property-group">
+                <label htmlFor="sceneName">SCENE NAME</label>
 
-            <div className="cs-panel-body">
-              {!current ? (
-                <div className="cs-empty" style={{ position: "relative", minHeight: 220 }}>
-                  <Layers size={36} />
-                  <strong>NO SCENE SELECTED</strong>
-                  <span>Create a scene or import an image.</span>
+                <input
+                  id="sceneName"
+                  className="text-input"
+                  value={current.name}
+                  onChange={(event) =>
+                    updateScene({ name: event.target.value })
+                  }
+                />
+              </div>
 
-                  <div className="cs-button-row">
-                    <button className="cs-btn primary" onClick={addScene}>
-                      <Plus size={16} />
-                      New Scene
-                    </button>
+              <div className="property-group">
+                <label>
+                  <MoveHorizontal size={13} />
+                  CAMERA MOTION
+                </label>
 
+                <div className="movement-grid">
+                  {(
+                    [
+                      ["left", "← LEFT"],
+                      ["right", "RIGHT →"],
+                      ["up", "↑ UP"],
+                      ["down", "↓ DOWN"],
+                      ["none", "● STATIC"],
+                    ] as [Motion, string][]
+                  ).map(([motion, label]) => (
                     <button
-                      className="cs-btn"
-                      onClick={() => fileRef.current?.click()}
+                      key={motion}
+                      className={
+                        current.motion === motion
+                          ? "motion-button active"
+                          : "motion-button"
+                      }
+                      onClick={() => updateScene({ motion })}
                     >
-                      <Upload size={16} />
-                      Import
+                      {label}
                     </button>
+                  ))}
+                </div>
+              </div>
+
+              <div className="property-group">
+                <label>
+                  <ZoomIn size={13} />
+                  <span>CAMERA ZOOM</span>
+                  <span className="value">{current.zoom.toFixed(2)}×</span>
+                </label>
+
+                <input
+                  className="range-input"
+                  type="range"
+                  min={1}
+                  max={2.5}
+                  step={0.05}
+                  value={current.zoom}
+                  onChange={(event) =>
+                    updateScene({ zoom: Number(event.target.value) })
+                  }
+                />
+              </div>
+
+              <div className="property-group">
+                <label>
+                  <Film size={13} />
+                  <span>DURATION</span>
+                  <span className="value">{current.duration}s</span>
+                </label>
+
+                <input
+                  className="range-input"
+                  type="range"
+                  min={1}
+                  max={20}
+                  step={1}
+                  value={current.duration}
+                  onChange={(event) =>
+                    updateScene({ duration: Number(event.target.value) })
+                  }
+                />
+              </div>
+
+              <div className="property-group">
+                <label>
+                  <RotateCw size={13} />
+                  <span>ROTATION</span>
+                  <span className="value">{current.rotation}°</span>
+                </label>
+
+                <input
+                  className="range-input"
+                  type="range"
+                  min={-180}
+                  max={180}
+                  step={1}
+                  value={current.rotation}
+                  onChange={(event) =>
+                    updateScene({ rotation: Number(event.target.value) })
+                  }
+                />
+              </div>
+
+              <div className="property-group">
+                <label>
+                  <Type size={13} />
+                  <span>OVERLAY TEXT</span>
+                  <button
+                    className="text-toggle"
+                    onClick={() => setShowText((value) => !value)}
+                  >
+                    {showText ? "VISIBLE" : "HIDDEN"}
+                  </button>
+                </label>
+
+                <textarea
+                  className="text-input text-area"
+                  value={current.text}
+                  onChange={(event) =>
+                    updateScene({ text: event.target.value })
+                  }
+                  placeholder="Enter cinematic text..."
+                />
+
+                <div className="text-options">
+                  <div>
+                    <label htmlFor="textColor">TEXT COLOR</label>
+                    <input
+                      id="textColor"
+                      type="color"
+                      value={current.textColor}
+                      onChange={(event) =>
+                        updateScene({ textColor: event.target.value })
+                      }
+                    />
+                  </div>
+
+                  <div>
+                    <label htmlFor="textSize">TEXT SIZE</label>
+                    <input
+                      id="textSize"
+                      type="range"
+                      min={14}
+                      max={48}
+                      value={current.textSize}
+                      onChange={(event) =>
+                        updateScene({
+                          textSize: Number(event.target.value),
+                        })
+                      }
+                    />
                   </div>
                 </div>
-              ) : (
-                <>
-                  {activeTab === "scenes" && (
-                    <>
-                      <div className="cs-field">
-                        <label>Scene Name</label>
+              </div>
 
-                        <input
-                          type="text"
-                          value={current.name}
-                          onChange={(event) =>
-                            updateScene({ name: event.target.value })
-                          }
-                          maxLength={100}
-                        />
-                      </div>
-
-                      <div className="cs-field">
-                        <label>
-                          Scene Duration
-                          <span>{current.duration}s</span>
-                        </label>
-
-                        <input
-                          type="range"
-                          min="1"
-                          max="30"
-                          step="1"
-                          value={current.duration}
-                          onChange={(event) => {
-                            updateScene({
-                              duration: Number(event.target.value),
-                            });
-                          }}
-                        />
-                      </div>
-
-                      <div className="cs-field">
-                        <label>Camera Motion</label>
-
-                        <div className="cs-motion-grid">
-                          {(
-                            [
-                              ["none", "Static"],
-                              ["left", "← Left"],
-                              ["right", "→ Right"],
-                              ["up", "↑ Up"],
-                              ["down", "↓ Down"],
-                              ["push", "Push In"],
-                              ["pull", "Pull Out"],
-                              ["orbit", "Orbit"],
-                            ] as [Motion, string][]
-                          ).map(([motion, label]) => (
-                            <button
-                              key={motion}
-                              className={`cs-motion ${
-                                current.motion === motion ? "active" : ""
-                              }`}
-                              onClick={() =>
-                                updateScene({ motion })
-                              }
-                            >
-                              {label}
-                            </button>
-                          ))}
-                        </div>
-                      </div>
-
-                      <div className="cs-field">
-                        <label>
-                          Camera Zoom
-                          <span>{current.zoom.toFixed(2)}×</span>
-                        </label>
-
-                        <input
-                          type="range"
-                          min="1"
-                          max="2.5"
-                          step=".05"
-                          value={current.zoom}
-                          onChange={(event) =>
-                            updateScene({
-                              zoom: Number(event.target.value),
-                            })
-                          }
-                        />
-                      </div>
-
-                      <div className="cs-field">
-                        <label>
-                          Smoothness
-                          <span>{current.smoothness}%</span>
-                        </label>
-
-                        <input
-                          type="range"
-                          min="10"
-                          max="100"
-                          value={current.smoothness}
-                          onChange={(event) =>
-                            updateScene({
-                              smoothness: Number(event.target.value),
-                            })
-                          }
-                        />
-                      </div>
-
-                      <div className="cs-field">
-                        <label>
-                          Rotation
-                          <span>{current.rotation}°</span>
-                        </label>
-
-                        <input
-                          type="range"
-                          min="-30"
-                          max="30"
-                          value={current.rotation}
-                          onChange={(event) =>
-                            updateScene({
-                              rotation: Number(event.target.value),
-                            })
-                          }
-                        />
-                      </div>
-
-                      <div className="cs-field">
-                        <label>
-                          Brightness
-                          <span>{current.brightness}%</span>
-                        </label>
-
-                        <input
-                          type="range"
-                          min="40"
-                          max="160"
-                          value={current.brightness}
-                          onChange={(event) =>
-                            updateScene({
-                              brightness: Number(event.target.value),
-                            })
-                          }
-                        />
-                      </div>
-
-                      <div className="cs-field">
-                        <label>
-                          Contrast
-                          <span>{current.contrast}%</span>
-                        </label>
-
-                        <input
-                          type="range"
-                          min="50"
-                          max="180"
-                          value={current.contrast}
-                          onChange={(event) =>
-                            updateScene({
-                              contrast: Number(event.target.value),
-                            })
-                          }
-                        />
-                      </div>
-                    </>
-                  )}
-
-                  {activeTab === "typography" && (
-                    <>
-                      <div className="cs-field">
-                        <label>Overlay Text</label>
-
-                        <textarea
-                          value={current.text}
-                          onChange={(event) =>
-                            updateScene({ text: event.target.value })
-                          }
-                          placeholder="Write your cinematic caption..."
-                          maxLength={500}
-                        />
-                      </div>
-
-                      <div className="cs-field">
-                        <label>
-                          Font Size
-                          <span>{current.textSize}px</span>
-                        </label>
-
-                        <input
-                          type="range"
-                          min="12"
-                          max="60"
-                          value={current.textSize}
-                          onChange={(event) =>
-                            updateScene({
-                              textSize: Number(event.target.value),
-                            })
-                          }
-                        />
-                      </div>
-
-                      <div className="cs-field">
-                        <label>Text Position</label>
-
-                        <select
-                          value={current.textPosition}
-                          onChange={(event) =>
-                            updateScene({
-                              textPosition: event.target.value as
-                                | "top"
-                                | "center"
-                                | "bottom",
-                            })
-                          }
-                        >
-                          <option value="top">Top</option>
-                          <option value="center">Center</option>
-                          <option value="bottom">Bottom</option>
-                        </select>
-                      </div>
-
-                      <button
-                        className="cs-btn"
-                        onClick={() =>
-                          updateScene({
-                            text: "",
-                            textSize: 28,
-                            textPosition: "bottom",
-                          })
-                        }
-                      >
-                        <Trash2 size={15} />
-                        Clear Typography
-                      </button>
-                    </>
-                  )}
-
-                  {activeTab === "motion" && (
-                    <>
-                      <div className="cs-engine">
-                        <span className="cs-status">
-                          <span className="cs-dot" />
-                          MOTION ENGINE
-                        </span>
-
-                        <strong>READY</strong>
-
-                        <p>CLIENT-SIDE PREVIEW</p>
-                      </div>
-
-                      <div className="cs-divider" />
-
-                      <div className="cs-field">
-                        <label>Motion Presets</label>
-
-                        <div className="cs-motion-grid">
-                          <button
-                            className="cs-motion"
-                            onClick={() =>
-                              updateScene({
-                                motion: "push",
-                                zoom: 1.45,
-                                rotation: 0,
-                                smoothness: 90,
-                              })
-                            }
-                          >
-                            Epic Reveal
-                          </button>
-
-                          <button
-                            className="cs-motion"
-                            onClick={() =>
-                              updateScene({
-                                motion: "pull",
-                                zoom: 1.5,
-                                rotation: 0,
-                                smoothness: 90,
-                              })
-                            }
-                          >
-                            Dream Sequence
-                          </button>
-
-                          <button
-                            className="cs-motion"
-                            onClick={() =>
-                              updateScene({
-                                motion: "orbit",
-                                zoom: 1.35,
-                                rotation: 5,
-                                smoothness: 80,
-                              })
-                            }
-                          >
-                            Orbit Shot
-                          </button>
-
-                          <button
-                            className="cs-motion"
-                            onClick={() =>
-                              updateScene({
-                                motion: "up",
-                                zoom: 1.25,
-                                rotation: 0,
-                                smoothness: 95,
-                              })
-                            }
-                          >
-                            Divine Rise
-                          </button>
-                        </div>
-                      </div>
-
-                      <div className="cs-field">
-                        <label>Loop Playback</label>
-
-                        <button
-                          className={`cs-motion ${
-                            loop ? "active" : ""
-                          }`}
-                          onClick={() => setLoop(!loop)}
-                          style={{ width: "100%" }}
-                        >
-                          <Repeat
-                            size={15}
-                            style={{
-                              verticalAlign: "middle",
-                              marginRight: 7,
-                            }}
-                          />
-                          {loop ? "Loop Enabled" : "Enable Loop"}
-                        </button>
-                      </div>
-
-                      <div className="cs-field">
-                        <label>Scene Operations</label>
-
-                        <div className="cs-button-row">
-                          <button
-                            className="cs-btn"
-                            onClick={duplicateScene}
-                          >
-                            <Copy size={15} />
-                            Duplicate
-                          </button>
-
-                          <button
-                            className="cs-btn"
-                            onClick={() =>
-                              fileRef.current?.click()
-                            }
-                          >
-                            <ImagePlus size={15} />
-                            Replace Image
-                          </button>
-                        </div>
-                      </div>
-                    </>
-                  )}
-
-                  <div className="cs-divider" />
-
-                  <div className="cs-button-row">
-                    <button
-                      className="cs-btn"
-                      onClick={duplicateScene}
-                    >
-                      <Copy size={15} />
-                      Duplicate
-                    </button>
-
-                    <button
-                      className="cs-btn danger"
-                      onClick={deleteScene}
-                    >
-                      <Trash2 size={15} />
-                      Delete Scene
-                    </button>
-                  </div>
-
-                  <div className="cs-divider" />
-
-                  <div className="cs-engine">
-                    <span className="cs-status">
-                      <span className="cs-dot" />
-                      RENDER ENGINE
-                    </span>
-
-                    <strong>READY</strong>
-
-                    <p>
-                      CLIENT-SIDE PREVIEW · 1080 × 1920 TARGET
-                    </p>
-                  </div>
-                </>
-              )}
-            </div>
-          </aside>
-        </div>
-
-        {showSettings && (
-          <div
-            style={{
-              position: "fixed",
-              inset: 0,
-              zIndex: 80,
-              background: "#000b",
-              display: "grid",
-              placeItems: "center",
-              padding: 20,
-            }}
-            onClick={() => setShowSettings(false)}
-          >
-            <div
-              className="cs-panel"
-              style={{ width: "100%", maxWidth: 400 }}
-              onClick={(event) => event.stopPropagation()}
-            >
-              <div className="cs-panel-head">
-                <h2>PROJECT SETTINGS</h2>
-
+              <div className="scene-actions">
                 <button
-                  className="cs-icon-btn"
-                  onClick={() => setShowSettings(false)}
+                  className="secondary-button"
+                  onClick={() => {
+                    const duplicate = {
+                      ...current,
+                      id: makeId(),
+                      name: `${current.name} Copy`,
+                    };
+
+                    setScenes((old) => [...old, duplicate]);
+                    setSelected(duplicate.id);
+                    notify("Scene duplicated");
+                  }}
                 >
-                  <X size={18} />
+                  <Maximize2 size={15} />
+                  DUPLICATE
+                </button>
+
+                <button className="export-button" onClick={exportCurrentFrame}>
+                  <Download size={15} />
+                  EXPORT PNG
                 </button>
               </div>
 
-              <div className="cs-panel-body">
-                <div className="cs-field">
-                  <label>Project Name</label>
+              <button className="delete-button" onClick={deleteScene}>
+                <Trash2 size={15} />
+                DELETE SCENE
+              </button>
+            </section>
+          )}
 
-                  <input
-                    type="text"
-                    value={projectName}
-                    onChange={(event) =>
-                      setProjectName(event.target.value)
-                    }
-                  />
-                </div>
+          <section className="engine-card">
+            <div className="engine-top">
+              <span className="status-dot" />
+              <span>RENDER ENGINE</span>
+              <span className="engine-ready">
+                {scenes.length ? "READY" : "WAITING"}
+              </span>
+            </div>
 
-                <div className="cs-field">
-                  <label>Project Statistics</label>
+            <div className="engine-description">
+              CLIENT-SIDE PREVIEW ENGINE
+            </div>
 
-                  <p className="cs-label">
-                    {scenes.length} scenes · {total.toFixed(1)} seconds
-                  </p>
-                </div>
+            <div className="engine-stats">
+              <div>
+                <span>SCENES</span>
+                <strong>{scenes.length}</strong>
+              </div>
 
-                <div className="cs-button-row">
-                  <button
-                    className="cs-btn primary"
-                    onClick={() => {
-                      saveProject();
-                      setShowSettings(false);
-                    }}
-                  >
-                    <Download size={15} />
-                    Export Project
-                  </button>
+              <div>
+                <span>DURATION</span>
+                <strong>{total.toFixed(1)}s</strong>
+              </div>
 
-                  <button
-                    className="cs-btn"
-                    onClick={() => {
-                      projectRef.current?.click();
-                      setShowSettings(false);
-                    }}
-                  >
-                    <Upload size={15} />
-                    Import Project
-                  </button>
-                </div>
+              <div>
+                <span>PLAYBACK</span>
+                <strong>{playing ? "ACTIVE" : "IDLE"}</strong>
               </div>
             </div>
-          </div>
-        )}
-
-        <input
-          ref={fileRef}
-          type="file"
-          accept="image/*"
-          multiple
-          hidden
-          onChange={importImages}
-        />
-
-        <input
-          ref={projectRef}
-          type="file"
-          accept=".json,application/json"
-          hidden
-          onChange={loadProject}
-        />
-
-        <footer className="cs-footer">
-          <span>● ENGINE ONLINE</span>
-          <span>1080 × 1920 TARGET</span>
-          <span>BUILD 0.2.0</span>
-        </footer>
-
-        {notice && (
-          <div className="cs-message" role="status">
-            <Check
-              size={15}
-              style={{ verticalAlign: "middle", marginRight: 8 }}
-            />
-            {notice}
-          </div>
-        )}
+          </section>
+        </section>
       </div>
-    </>
+
+      <footer className="statusbar">
+        <span>
+          <span className="status-dot" /> ENGINE ONLINE
+        </span>
+
+        <span>
+          {ratio === "portrait"
+            ? "1080 × 1920"
+            : ratio === "square"
+              ? "1080 × 1080"
+              : "1920 × 1080"}
+        </span>
+
+        <span>BUILD 1.0.0</span>
+      </footer>
+
+      {notice && (
+        <div className="toast">
+          <Check size={15} />
+          {notice}
+          <button onClick={() => setNotice("")} aria-label="Close notification">
+            <X size={14} />
+          </button>
+        </div>
+      )}
+    </main>
   );
-      }
+}
+
+function SparkleIcon() {
+  return <Clapperboard size={17} />;
+                  }
