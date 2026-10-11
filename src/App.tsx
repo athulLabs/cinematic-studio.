@@ -27,6 +27,7 @@ import "./index.css";
 type Motion = "left" | "right" | "up" | "down" | "none";
 type Motion3D = "none" | "orbit" | "tilt" | "dolly" | "float";
 type VisualEffect = "none" | "cinematic" | "monochrome" | "warm" | "dream";
+type SceneTransition = "cut" | "fade" | "dissolve" | "zoom";
 
 type Scene = {
   id: string;
@@ -37,6 +38,8 @@ type Scene = {
   motion: Motion;
   motion3D: Motion3D;
   effect: VisualEffect;
+  transition: SceneTransition;
+  transitionDuration: number;
   rotation: number;
   text: string;
   textColor: string;
@@ -61,6 +64,8 @@ const createScene = (): Scene => ({
   motion: "right",
   motion3D: "none",
   effect: "cinematic",
+  transition: "dissolve",
+  transitionDuration: 0.8,
   rotation: 0,
   text: "",
   textColor: "#ffffff",
@@ -124,6 +129,18 @@ export default function App() {
   const localTime = current
     ? clamp(time - elapsedBeforeCurrent, 0, current.duration)
     : 0;
+  const currentIndex = current ? scenes.findIndex((scene) => scene.id === current.id) : -1;
+  const previousScene = currentIndex > 0 ? scenes[currentIndex - 1] : undefined;
+  const transitionProgress = current && playing && current.transition !== "cut"
+    ? clamp(localTime / Math.max(0.1, current.transitionDuration), 0, 1)
+    : 1;
+  const transitionActive = Boolean(
+    playing &&
+    current &&
+    previousScene?.image &&
+    current.transition !== "cut" &&
+    localTime < current.transitionDuration
+  );
 
     // Animate camera movement from the timeline clock so scrubbing and playback match.
   const cameraProgress = current
@@ -463,12 +480,17 @@ export default function App() {
         recorder.onstop = () => resolve(new Blob(chunks, { type: supportedMime }));
       });
 
-      const drawSceneFrame = (scene: Scene, img: HTMLImageElement, progress: number) => {
+      const drawSceneFrame = (
+        scene: Scene,
+        img: HTMLImageElement,
+        progress: number,
+        transition?: { type: SceneTransition; progress: number; previousImage?: HTMLImageElement }
+      ) => {
         ctx.fillStyle = "#050811";
         ctx.fillRect(0, 0, width, height);
         if (img.naturalWidth) {
           const ease = progress * progress * (3 - 2 * progress);
-          const zoom = 1 + (scene.zoom - 1) * 0.7 * ease;
+          const zoom = (1 + (scene.zoom - 1) * 0.7 * ease) * (transition?.type === "zoom" ? 1.12 - transition.progress * 0.12 : 1);
           const scale = Math.max(width / img.naturalWidth, height / img.naturalHeight) * zoom;
           const dw = img.naturalWidth * scale;
           const dh = img.naturalHeight * scale;
@@ -496,8 +518,31 @@ export default function App() {
             : scene.effect === "dream" ? "saturate(1.25) brightness(1.06)"
             : scene.effect === "cinematic" ? "contrast(1.08) saturate(.88)" : "none";
           ctx.filter = filter;
+          ctx.globalAlpha = transition?.type === "dissolve" ? transition.progress : 1;
           ctx.drawImage(img, -dw / 2 + pan * width, -dh / 2 + panY * height, dw, dh);
+          ctx.globalAlpha = 1;
+          if (
+            transition?.previousImage?.naturalWidth &&
+            (transition.type === "dissolve" || transition.type === "zoom")
+          ) {
+            const oldImg = transition.previousImage;
+            const oldScale = Math.max(width / oldImg.naturalWidth, height / oldImg.naturalHeight);
+            ctx.globalAlpha = 1 - transition.progress;
+            ctx.drawImage(
+              oldImg,
+              (width - oldImg.naturalWidth * oldScale) / 2,
+              (height - oldImg.naturalHeight * oldScale) / 2,
+              oldImg.naturalWidth * oldScale,
+              oldImg.naturalHeight * oldScale
+            );
+            ctx.globalAlpha = 1;
+          }
           ctx.restore();
+        }
+
+        if (transition?.type === "fade") {
+          ctx.fillStyle = `rgba(0,0,0,${1 - transition.progress})`;
+          ctx.fillRect(0, 0, width, height);
         }
 
         const gradient = ctx.createLinearGradient(0, height * 0.45, 0, height);
@@ -526,16 +571,35 @@ export default function App() {
           const elapsed = Math.min(now - startAt, fullDurationMs);
           let cursor = 0;
           let entry = loaded[loaded.length - 1];
+          let entryIndex = loaded.length - 1;
           let local = entry.scene.duration;
-          for (const item of loaded) {
+          for (let index = 0; index < loaded.length; index++) {
+            const item = loaded[index];
             if (elapsed / 1000 < cursor + item.scene.duration) {
               entry = item;
+              entryIndex = index;
               local = elapsed / 1000 - cursor;
               break;
             }
             cursor += item.scene.duration;
           }
-          drawSceneFrame(entry.scene, entry.img, clamp(local / Math.max(entry.scene.duration, 0.1), 0, 1));
+          const transitionProgress = clamp(
+            local / Math.max(0.1, entry.scene.transitionDuration || 0.8),
+            0,
+            1
+          );
+          const isTransitioning = entryIndex > 0 &&
+            entry.scene.transition !== "cut" &&
+            local < (entry.scene.transitionDuration || 0.8);
+          const previousImage = entryIndex > 0 ? loaded[entryIndex - 1].img : undefined;
+          drawSceneFrame(
+            entry.scene,
+            entry.img,
+            clamp(local / Math.max(entry.scene.duration, 0.1), 0, 1),
+            isTransitioning
+              ? { type: entry.scene.transition, progress: transitionProgress, previousImage }
+              : undefined
+          );
           if (elapsed >= fullDurationMs) {
             window.setTimeout(resolve, 180);
           } else {
@@ -823,17 +887,46 @@ export default function App() {
           <div className={`preview-shell ratio-${ratio}`}>
             {current?.image ? (
               <div className="preview-stage">
+                {transitionActive && current.transition === "dissolve" && previousScene?.image && (
+                  <img
+                    className="transition-previous-image"
+                    src={previousScene.image}
+                    alt=""
+                    aria-hidden="true"
+                    style={{ opacity: 1 - transitionProgress }}
+                  />
+                )}
+
                 <img
                   key={current.id}
                   className="preview-image"
                   src={current.image}
                   alt={current.name}
                   style={{
-                    transform: `perspective(900px) translate3d(${cameraX}%, ${cameraY}%, 0) scale(${animatedZoom * depthScale}) rotateX(${tiltX}deg) rotateY(${tiltY}deg) rotateZ(${animatedRotation}deg)`,
+                    transform: `perspective(900px) translate3d(${cameraX}%, ${cameraY}%, 0) scale(${animatedZoom * depthScale * (transitionActive && current.transition === "zoom" ? 1.12 - transitionProgress * 0.12 : 1)}) rotateX(${tiltX}deg) rotateY(${tiltY}deg) rotateZ(${animatedRotation}deg)`,
                     filter: effectFilter,
+                    opacity: transitionActive && current.transition === "dissolve" ? transitionProgress : 1,
                     transformStyle: "preserve-3d",
                   }}
                 />
+
+                {transitionActive && current.transition === "fade" && (
+                  <div
+                    className="transition-blackout"
+                    style={{ opacity: 1 - transitionProgress }}
+                    aria-hidden="true"
+                  />
+                )}
+
+                {transitionActive && current.transition === "zoom" && previousScene?.image && (
+                  <img
+                    className="transition-previous-image"
+                    src={previousScene.image}
+                    alt=""
+                    aria-hidden="true"
+                    style={{ opacity: 1 - transitionProgress }}
+                  />
+                )}
 
                 <div className="preview-vignette" />
 
@@ -1082,6 +1175,36 @@ export default function App() {
                     >{label}</button>
                   ))}
                 </div>
+              </div>
+
+              <div className="property-group transition-controls">
+                <label><Film size={13} /> SCENE TRANSITION</label>
+                <select
+                  className="text-input transition-select"
+                  value={current.transition}
+                  onChange={(event) => updateScene({ transition: event.target.value as SceneTransition })}
+                  aria-label="Transition into this scene"
+                >
+                  <option value="cut">Hard cut</option>
+                  <option value="fade">Fade from black</option>
+                  <option value="dissolve">Cross dissolve</option>
+                  <option value="zoom">Cinematic zoom</option>
+                </select>
+                <label className="transition-duration-label">
+                  <span>TRANSITION LENGTH</span>
+                  <span className="value">{current.transitionDuration.toFixed(1)}s</span>
+                </label>
+                <input
+                  className="range-input"
+                  type="range"
+                  min={0.3}
+                  max={1.5}
+                  step={0.1}
+                  value={current.transitionDuration}
+                  onChange={(event) => updateScene({ transitionDuration: Number(event.target.value) })}
+                  aria-label="Transition duration"
+                />
+                <span className="control-hint">Transition applies when playback enters this scene.</span>
               </div>
 
               <div className="property-group">
