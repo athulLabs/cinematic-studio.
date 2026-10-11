@@ -131,7 +131,7 @@ export default function App() {
   const [projectName, setProjectName] = useState('Untitled Film');
 
   const fileRef = useRef<HTMLInputElement>(null);
-  const previousTime = useRef(0);
+  
 
   const current =
     scenes.find(scene => scene.id === selected) || scenes[0];
