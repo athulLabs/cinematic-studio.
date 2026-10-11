@@ -83,16 +83,36 @@ export default function App() {
   const fileRef = useRef<HTMLInputElement>(null);
   const projectRef = useRef<HTMLInputElement>(null);
 
-  const current = scenes.find((scene) => scene.id === selected);
-
   const total = scenes.reduce(
     (sum, scene) => sum + scene.duration,
     0
   );
 
-  const elapsedBeforeCurrent = scenes
-    .slice(0, Math.max(0, scenes.findIndex((s) => s.id === selected)))
-    .reduce((sum, scene) => sum + scene.duration, 0);
+  // Resolve the scene directly from the playback clock. This avoids relying
+  // on a delayed state effect to switch the preview at scene boundaries.
+  let timelineCursor = 0;
+  let timelineScene: Scene | undefined;
+
+  for (const scene of scenes) {
+    if (time < timelineCursor + scene.duration) {
+      timelineScene = scene;
+      break;
+    }
+    timelineCursor += scene.duration;
+  }
+
+  if (!timelineScene && scenes.length > 0) {
+    timelineScene = scenes[scenes.length - 1];
+    timelineCursor = total - timelineScene.duration;
+  }
+
+  const current = playing ? timelineScene : scenes.find((scene) => scene.id === selected);
+
+  const elapsedBeforeCurrent = current
+    ? scenes
+        .slice(0, scenes.findIndex((scene) => scene.id === current.id))
+        .reduce((sum, scene) => sum + scene.duration, 0)
+    : 0;
 
   const localTime = current
     ? clamp(time - elapsedBeforeCurrent, 0, current.duration)
@@ -152,32 +172,24 @@ export default function App() {
     return () => cancelAnimationFrame(frame);
   }, [playing, total]);
 
-  // Keep the preview's selected scene synchronized with the global timeline clock.
-  // This is what makes playback automatically move into the next scene.
+  // Keep the highlighted timeline card synchronized with playback.
   useEffect(() => {
     if (!scenes.length) {
-      setSelected("");
+      if (selected) setSelected("");
       return;
     }
 
     let cursor = 0;
-
     for (const scene of scenes) {
-      const sceneEnd = cursor + scene.duration;
-
-      if (time < sceneEnd) {
+      if (time < cursor + scene.duration) {
         if (selected !== scene.id) setSelected(scene.id);
         return;
       }
-
-      cursor = sceneEnd;
+      cursor += scene.duration;
     }
 
-    // At the exact end of the timeline, keep the final scene selected.
     const lastScene = scenes[scenes.length - 1];
-    if (lastScene && selected !== lastScene.id) {
-      setSelected(lastScene.id);
-    }
+    if (lastScene && selected !== lastScene.id) setSelected(lastScene.id);
   }, [time, scenes, selected]);
 
   useEffect(() => {
