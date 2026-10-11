@@ -22,7 +22,7 @@ import {
   X,
 } from "lucide-react";
 
-import "./index.css";
+import "./.css";
 
 type Motion = "left" | "right" | "up" | "down" | "none";
 
@@ -124,33 +124,43 @@ export default function App() {
   };
 
   useEffect(() => {
-    if (!playing || total <= 0) return;
+    if (!playing || total <= 0 || scenes.length === 0) return;
 
     let last = performance.now();
+    let playbackTime = time;
     let frame = 0;
 
     const tick = (now: number) => {
       const delta = Math.min((now - last) / 1000, 0.1);
       last = now;
+      const next = playbackTime + delta;
 
-      setTime((previous) => {
-        const next = previous + delta;
+      if (next >= total) {
+        setTime(0);
+        setSelected(scenes[0].id);
+        setPlaying(false);
+        return;
+      }
 
-        if (next >= total) {
-          setPlaying(false);
-          return 0;
+      playbackTime = next;
+      setTime(next);
+
+      // Keep the visible image in sync with the playhead as it crosses scene boundaries.
+      let cursor = 0;
+      for (const scene of scenes) {
+        if (next < cursor + scene.duration) {
+          setSelected(scene.id);
+          break;
         }
-
-        return next;
-      });
+        cursor += scene.duration;
+      }
 
       frame = requestAnimationFrame(tick);
     };
 
     frame = requestAnimationFrame(tick);
-
     return () => cancelAnimationFrame(frame);
-  }, [playing, total]);
+  }, [playing, total, scenes]);
 
   useEffect(() => {
     if (!scenes.length) {
