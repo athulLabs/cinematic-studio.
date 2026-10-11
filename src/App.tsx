@@ -152,6 +152,34 @@ export default function App() {
     return () => cancelAnimationFrame(frame);
   }, [playing, total]);
 
+  // Keep the preview's selected scene synchronized with the global timeline clock.
+  // This is what makes playback automatically move into the next scene.
+  useEffect(() => {
+    if (!scenes.length) {
+      setSelected("");
+      return;
+    }
+
+    let cursor = 0;
+
+    for (const scene of scenes) {
+      const sceneEnd = cursor + scene.duration;
+
+      if (time < sceneEnd) {
+        if (selected !== scene.id) setSelected(scene.id);
+        return;
+      }
+
+      cursor = sceneEnd;
+    }
+
+    // At the exact end of the timeline, keep the final scene selected.
+    const lastScene = scenes[scenes.length - 1];
+    if (lastScene && selected !== lastScene.id) {
+      setSelected(lastScene.id);
+    }
+  }, [time, scenes, selected]);
+
   useEffect(() => {
     if (!scenes.length) {
       setSelected("");
