@@ -98,7 +98,6 @@ export default function App() {
     ? clamp(time - elapsedBeforeCurrent, 0, current.duration)
     : 0;
 
-  const progress = total > 0 ? (time / total) * 100 : 0;
   // Animate camera movement from the timeline clock so scrubbing and playback match.
   const cameraProgress = current
     ? clamp(localTime / Math.max(current.duration, 0.1), 0, 1)
@@ -440,8 +439,6 @@ export default function App() {
       notify("Could not export this image");
     }
   };
-
-  const movementClass = current?.motion ?? "none";
 
   return (
     <main className="studio">
@@ -993,5 +990,4 @@ export default function App() {
 
 function SparkleIcon() {
   return <Clapperboard size={17} />;
-
-    }
+                  }
