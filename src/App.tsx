@@ -25,6 +25,8 @@ import {
 import "./index.css";
 
 type Motion = "left" | "right" | "up" | "down" | "none";
+type Motion3D = "none" | "orbit" | "tilt" | "dolly" | "float";
+type VisualEffect = "none" | "cinematic" | "monochrome" | "warm" | "dream";
 
 type Scene = {
   id: string;
@@ -33,6 +35,8 @@ type Scene = {
   duration: number;
   zoom: number;
   motion: Motion;
+  motion3D: Motion3D;
+  effect: VisualEffect;
   rotation: number;
   text: string;
   textColor: string;
@@ -55,6 +59,8 @@ const createScene = (): Scene => ({
   duration: 5,
   zoom: 1,
   motion: "right",
+  motion3D: "none",
+  effect: "cinematic",
   rotation: 0,
   text: "",
   textColor: "#ffffff",
@@ -76,6 +82,7 @@ export default function App() {
   >("scenes");
   const [notice, setNotice] = useState("");
   const [showText, setShowText] = useState(true);
+  const [exporting, setExporting] = useState(false);
   const [ratio, setRatio] = useState<"portrait" | "landscape" | "square">(
     "portrait"
   );
@@ -137,6 +144,24 @@ export default function App() {
     ? 1 + (current.zoom - 1) * 0.7 * cameraEase
     : 1;
   const animatedRotation = current ? current.rotation * cameraEase : 0;
+  const tiltX = current?.motion3D === "tilt" || current?.motion3D === "orbit"
+    ? Math.sin(cameraProgress * Math.PI * 2) * (current.motion3D === "orbit" ? 9 : 5)
+    : current?.motion3D === "float" ? Math.sin(cameraProgress * Math.PI * 2) * 3 : 0;
+  const tiltY = current?.motion3D === "orbit"
+    ? Math.cos(cameraProgress * Math.PI * 2) * 9
+    : current?.motion3D === "tilt" ? Math.sin(cameraProgress * Math.PI) * 5 : 0;
+  const depthScale = current?.motion3D === "dolly"
+    ? 1 + cameraEase * 0.18
+    : current?.motion3D === "orbit" ? 1 + Math.sin(cameraProgress * Math.PI) * 0.08 : 1;
+  const effectFilter = current?.effect === "monochrome"
+    ? "grayscale(1) contrast(1.12)"
+    : current?.effect === "warm"
+      ? "sepia(.22) saturate(1.22) contrast(1.04)"
+      : current?.effect === "dream"
+        ? "saturate(1.25) brightness(1.06) blur(.15px)"
+        : current?.effect === "cinematic"
+          ? "contrast(1.08) saturate(.88)"
+          : "none";
 
   const notify = (message: string) => {
     setNotice(message);
@@ -377,6 +402,202 @@ export default function App() {
     }
   };
 
+  const exportVideo = async () => {
+    if (!scenes.length || !scenes.some((scene) => scene.image)) {
+      notify("Import at least one image first");
+      return;
+    }
+    if (!("MediaRecorder" in window) || !HTMLCanvasElement.prototype.captureStream) {
+      notify("Video export is not supported in this browser");
+      return;
+    }
+
+    setExporting(true);
+    setPlaying(false);
+    notify("Preparing video render…");
+
+    let stream: MediaStream | undefined;
+    try {
+      // Render at 720p to keep memory use manageable on mobile devices.
+      const width = ratio === "square" ? 720 : ratio === "landscape" ? 1280 : 720;
+      const height = ratio === "square" ? 720 : ratio === "landscape" ? 720 : 1280;
+      const canvas = document.createElement("canvas");
+      canvas.width = width;
+      canvas.height = height;
+      const ctx = canvas.getContext("2d");
+      if (!ctx) throw new Error("Canvas unavailable");
+
+      const loaded = await Promise.all(scenes.map(async (scene) => {
+        const img = new Image();
+        img.src = scene.image;
+        if (scene.image) {
+          await new Promise<void>((resolve, reject) => {
+            if (img.complete && img.naturalWidth) resolve();
+            else {
+              img.onload = () => resolve();
+              img.onerror = () => reject(new Error(`Could not load ${scene.name}`));
+            }
+          });
+        }
+        return { scene, img };
+      }));
+
+      const supportedMime = [
+        "video/mp4;codecs=h264",
+        "video/mp4",
+        "video/webm;codecs=vp9",
+        "video/webm;codecs=vp8",
+        "video/webm",
+      ].find((mime) => MediaRecorder.isTypeSupported(mime));
+
+      if (!supportedMime) throw new Error("This browser has no supported video recording format");
+
+      stream = canvas.captureStream(30);
+      const recorder = new MediaRecorder(stream, { mimeType: supportedMime, videoBitsPerSecond: 5_000_000 });
+      const chunks: BlobPart[] = [];
+      const finished = new Promise<Blob>((resolve, reject) => {
+        recorder.ondataavailable = (event) => {
+          if (event.data.size) chunks.push(event.data);
+        };
+        recorder.onerror = () => reject(new Error("Browser video recording failed"));
+        recorder.onstop = () => resolve(new Blob(chunks, { type: supportedMime }));
+      });
+
+      const drawSceneFrame = (scene: Scene, img: HTMLImageElement, progress: number) => {
+        ctx.fillStyle = "#050811";
+        ctx.fillRect(0, 0, width, height);
+        if (img.naturalWidth) {
+          const ease = progress * progress * (3 - 2 * progress);
+          const zoom = 1 + (scene.zoom - 1) * 0.7 * ease;
+          const scale = Math.max(width / img.naturalWidth, height / img.naturalHeight) * zoom;
+          const dw = img.naturalWidth * scale;
+          const dh = img.naturalHeight * scale;
+          const pan = scene.motion === "left" ? (0.025 - ease * 0.05)
+            : scene.motion === "right" ? (-0.025 + ease * 0.05) : 0;
+          const panY = scene.motion === "up" ? (0.025 - ease * 0.05)
+            : scene.motion === "down" ? (-0.025 + ease * 0.05) : 0;
+          let rx = 0, ry = 0, z = 0;
+          if (scene.motion3D === "tilt") rx = Math.sin(progress * Math.PI) * 5;
+          if (scene.motion3D === "orbit") {
+            rx = Math.sin(progress * Math.PI * 2) * 8;
+            ry = Math.cos(progress * Math.PI * 2) * 8;
+            z = Math.sin(progress * Math.PI) * 0.08;
+          }
+          if (scene.motion3D === "float") rx = Math.sin(progress * Math.PI * 2) * 3;
+          if (scene.motion3D === "dolly") z = ease * 0.18;
+
+          ctx.save();
+          ctx.translate(width / 2, height / 2);
+          ctx.rotate((scene.rotation * ease * Math.PI) / 180);
+          ctx.transform(1, Math.sin(rx * Math.PI / 180) * 0.08, Math.sin(ry * Math.PI / 180) * 0.08, 1, 0, 0);
+          ctx.scale(1 + z, 1 + z);
+          const filter = scene.effect === "monochrome" ? "grayscale(1) contrast(1.12)"
+            : scene.effect === "warm" ? "sepia(.22) saturate(1.22) contrast(1.04)"
+            : scene.effect === "dream" ? "saturate(1.25) brightness(1.06)"
+            : scene.effect === "cinematic" ? "contrast(1.08) saturate(.88)" : "none";
+          ctx.filter = filter;
+          ctx.drawImage(img, -dw / 2 + pan * width, -dh / 2 + panY * height, dw, dh);
+          ctx.restore();
+        }
+
+        const gradient = ctx.createLinearGradient(0, height * 0.45, 0, height);
+        gradient.addColorStop(0, "rgba(0,0,0,0)");
+        gradient.addColorStop(1, "rgba(0,0,0,.65)");
+        ctx.fillStyle = gradient;
+        ctx.fillRect(0, 0, width, height);
+
+        if (showText && scene.text) {
+          ctx.fillStyle = scene.textColor;
+          ctx.textAlign = "center";
+          ctx.textBaseline = "middle";
+          ctx.font = `600 ${scene.textSize * (height / 800)}px Arial`;
+          ctx.shadowColor = "rgba(0,0,0,.7)";
+          ctx.shadowBlur = 8;
+          ctx.fillText(scene.text, width / 2, height * scene.textPosition / 100, width * 0.85);
+          ctx.shadowBlur = 0;
+        }
+      };
+
+      recorder.start(250);
+      const startAt = performance.now();
+      const fullDurationMs = Math.max(1, total) * 1000;
+      await new Promise<void>((resolve) => {
+        const draw = (now: number) => {
+          const elapsed = Math.min(now - startAt, fullDurationMs);
+          let cursor = 0;
+          let entry = loaded[loaded.length - 1];
+          let local = entry.scene.duration;
+          for (const item of loaded) {
+            if (elapsed / 1000 < cursor + item.scene.duration) {
+              entry = item;
+              local = elapsed / 1000 - cursor;
+              break;
+            }
+            cursor += item.scene.duration;
+          }
+          drawSceneFrame(entry.scene, entry.img, clamp(local / Math.max(entry.scene.duration, 0.1), 0, 1));
+          if (elapsed >= fullDurationMs) {
+            window.setTimeout(resolve, 180);
+          } else {
+            requestAnimationFrame(draw);
+          }
+        };
+        requestAnimationFrame(draw);
+      });
+      recorder.stop();
+      let recorded = await finished;
+      stream.getTracks().forEach((track) => track.stop());
+
+      let extension = supportedMime.includes("mp4") ? "mp4" : "webm";
+      if (extension !== "mp4") {
+        notify("Converting video to MP4… keep this page open");
+        try {
+          // Load FFmpeg only when needed; it is large and is not bundled into the app.
+          const dynamicImport = new Function("url", "return import(url)") as (url: string) => Promise<any>;
+          const ffmpegModule = await dynamicImport("https://cdn.jsdelivr.net/npm/@ffmpeg/ffmpeg@0.12.15/dist/esm/index.js");
+          const utilModule = await dynamicImport("https://cdn.jsdelivr.net/npm/@ffmpeg/util@0.12.2/dist/esm/index.js");
+          const ffmpeg = new ffmpegModule.FFmpeg();
+          const coreBase = "https://cdn.jsdelivr.net/npm/@ffmpeg/core@0.12.10/dist/esm";
+          const coreURL = await utilModule.toBlobURL(`${coreBase}/ffmpeg-core.js`, "text/javascript");
+          const wasmURL = await utilModule.toBlobURL(`${coreBase}/ffmpeg-core.wasm`, "application/wasm");
+          await ffmpeg.load({ coreURL, wasmURL });
+          await ffmpeg.writeFile("input.webm", new Uint8Array(await recorded.arrayBuffer()));
+          await ffmpeg.exec(["-i", "input.webm", "-c:v", "libx264", "-pix_fmt", "yuv420p", "-movflags", "+faststart", "output.mp4"]);
+          const output = await ffmpeg.readFile("output.mp4");
+          recorded = new Blob([output], { type: "video/mp4" });
+          extension = "mp4";
+          await ffmpeg.deleteFile("input.webm");
+          await ffmpeg.deleteFile("output.mp4");
+          ffmpeg.terminate();
+        } catch (conversionError) {
+          console.error(conversionError);
+          const url = URL.createObjectURL(recorded);
+          const a = document.createElement("a");
+          a.href = url;
+          a.download = `${projectName || "cinematic-film"}.webm`;
+          a.click();
+          URL.revokeObjectURL(url);
+          notify("MP4 conversion unavailable here; saved WebM instead");
+          return;
+        }
+      }
+
+      const url = URL.createObjectURL(recorded);
+      const anchor = document.createElement("a");
+      anchor.href = url;
+      anchor.download = `${projectName || "cinematic-film"}.${extension}`;
+      anchor.click();
+      window.setTimeout(() => URL.revokeObjectURL(url), 1500);
+      notify(`Video exported as ${extension.toUpperCase()}`);
+    } catch (error) {
+      console.error(error);
+      notify(error instanceof Error ? error.message : "Video export failed");
+    } finally {
+      stream?.getTracks().forEach((track) => track.stop());
+      setExporting(false);
+    }
+  };
+
   const exportCurrentFrame = async () => {
     if (!current?.image) {
       notify("Import an image first");
@@ -608,7 +829,9 @@ export default function App() {
                   src={current.image}
                   alt={current.name}
                   style={{
-                    transform: `translate(${cameraX}%, ${cameraY}%) scale(${animatedZoom}) rotate(${animatedRotation}deg)`,
+                    transform: `perspective(900px) translate3d(${cameraX}%, ${cameraY}%, 0) scale(${animatedZoom * depthScale}) rotateX(${tiltX}deg) rotateY(${tiltY}deg) rotateZ(${animatedRotation}deg)`,
+                    filter: effectFilter,
+                    transformStyle: "preserve-3d",
                   }}
                 />
 
@@ -824,6 +1047,44 @@ export default function App() {
               </div>
 
               <div className="property-group">
+                <label><Clapperboard size={13} /> 3D CAMERA MOTION</label>
+                <div className="movement-grid motion3d-grid">
+                  {([
+                    ["none", "OFF"],
+                    ["orbit", "ORBIT"],
+                    ["tilt", "TILT"],
+                    ["dolly", "DOLLY"],
+                    ["float", "FLOAT"],
+                  ] as [Motion3D, string][]).map(([motion3D, label]) => (
+                    <button
+                      key={motion3D}
+                      className={current.motion3D === motion3D ? "motion-button active" : "motion-button"}
+                      onClick={() => updateScene({ motion3D })}
+                    >{label}</button>
+                  ))}
+                </div>
+              </div>
+
+              <div className="property-group">
+                <label><Aperture size={13} /> VISUAL EFFECT</label>
+                <div className="movement-grid effects-grid">
+                  {([
+                    ["none", "CLEAN"],
+                    ["cinematic", "CINEMA"],
+                    ["monochrome", "B&W"],
+                    ["warm", "WARM"],
+                    ["dream", "DREAM"],
+                  ] as [VisualEffect, string][]).map(([effect, label]) => (
+                    <button
+                      key={effect}
+                      className={current.effect === effect ? "motion-button active" : "motion-button"}
+                      onClick={() => updateScene({ effect })}
+                    >{label}</button>
+                  ))}
+                </div>
+              </div>
+
+              <div className="property-group">
                 <label>
                   <ZoomIn size={13} />
                   <span>CAMERA ZOOM</span>
@@ -963,6 +1224,10 @@ export default function App() {
                 <button className="export-button" onClick={exportCurrentFrame}>
                   <Download size={15} />
                   EXPORT PNG
+                </button>
+                <button className="export-button video-export-button" onClick={() => void exportVideo()} disabled={exporting}>
+                  <Film size={15} />
+                  {exporting ? "RENDERING…" : "EXPORT MP4"}
                 </button>
               </div>
 
