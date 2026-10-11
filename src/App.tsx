@@ -12,8 +12,23 @@ import {
   Sparkles,
   ZoomIn,
   MoveHorizontal,
-  Film
+  Film,
+  RotateCw,
+  Gauge,
+  Repeat2,
+  Camera,
+  Clapperboard
 } from 'lucide-react';
+
+type Movement =
+  | 'right'
+  | 'left'
+  | 'up'
+  | 'down'
+  | 'push'
+  | 'pull'
+  | 'orbit'
+  | 'handheld';
 
 type Scene = {
   id: string;
@@ -21,9 +36,91 @@ type Scene = {
   image: string;
   duration: number;
   zoom: number;
-  movement: string;
+  startZoom: number;
+  rotation: number;
+  speed: number;
+  smoothness: number;
+  movement: Movement;
+  preset: string;
   text: string;
+  loop: boolean;
 };
+
+const presets: {
+  name: string;
+  movement: Movement;
+  zoom: number;
+  startZoom: number;
+  rotation: number;
+  speed: number;
+  smoothness: number;
+}[] = [
+  {
+    name: 'Epic Reveal',
+    movement: 'pull',
+    startZoom: 1.45,
+    zoom: 1.05,
+    rotation: 0,
+    speed: 0.7,
+    smoothness: 90
+  },
+  {
+    name: 'Dramatic Entrance',
+    movement: 'push',
+    startZoom: 1,
+    zoom: 1.5,
+    rotation: 2,
+    speed: 0.8,
+    smoothness: 85
+  },
+  {
+    name: 'Dream Sequence',
+    movement: 'up',
+    startZoom: 1.12,
+    zoom: 1.22,
+    rotation: 0.5,
+    speed: 0.45,
+    smoothness: 100
+  },
+  {
+    name: 'Action Shot',
+    movement: 'handheld',
+    startZoom: 1.2,
+    zoom: 1.35,
+    rotation: 1.5,
+    speed: 1.8,
+    smoothness: 35
+  },
+  {
+    name: 'Divine Atmosphere',
+    movement: 'orbit',
+    startZoom: 1.12,
+    zoom: 1.28,
+    rotation: 1,
+    speed: 0.5,
+    smoothness: 100
+  },
+  {
+    name: 'Documentary',
+    movement: 'right',
+    startZoom: 1.15,
+    zoom: 1.3,
+    rotation: 0,
+    speed: 0.65,
+    smoothness: 90
+  }
+];
+
+const uid = () => {
+  if (typeof crypto !== 'undefined' && crypto.randomUUID) {
+    return crypto.randomUUID();
+  }
+
+  return `${Date.now()}-${Math.random()}`;
+};
+
+const clamp = (value: number, min: number, max: number) =>
+  Math.max(min, Math.min(max, value));
 
 export default function App() {
   const [scenes, setScenes] = useState<Scene[]>([]);
@@ -34,8 +131,10 @@ export default function App() {
   const [projectName, setProjectName] = useState('Untitled Film');
 
   const fileRef = useRef<HTMLInputElement>(null);
+  const previousTime = useRef(0);
 
-  const current = scenes.find(s => s.id === selected) || scenes[0];
+  const current =
+    scenes.find(scene => scene.id === selected) || scenes[0];
 
   const total = scenes.reduce(
     (sum, scene) => sum + scene.duration,
@@ -49,12 +148,17 @@ export default function App() {
     let frame = 0;
 
     const tick = (now: number) => {
-      const delta = (now - last) / 1000;
+      const delta = Math.min((now - last) / 1000, 0.1);
       last = now;
 
       setTime(previous => {
         const next = previous + delta;
-        return next >= total ? next % total : next;
+
+        if (next >= total) {
+          return next % total;
+        }
+
+        return next;
       });
 
       frame = requestAnimationFrame(tick);
@@ -70,14 +174,20 @@ export default function App() {
 
     const additions: Scene[] = Array.from(files)
       .filter(file => file.type.startsWith('image/'))
-      .map((file, index) => ({
-        id: crypto.randomUUID(),
+      .map(file => ({
+        id: uid(),
         name: file.name.replace(/\.[^.]+$/, ''),
         image: URL.createObjectURL(file),
         duration: 5,
-        zoom: 1.18,
-        movement: index % 2 === 0 ? 'right' : 'left',
-        text: ''
+        zoom: 1.3,
+        startZoom: 1,
+        rotation: 0,
+        speed: 1,
+        smoothness: 85,
+        movement: 'right' as Movement,
+        preset: 'Custom',
+        text: '',
+        loop: false
       }));
 
     if (!additions.length) return;
@@ -99,28 +209,116 @@ export default function App() {
     );
   };
 
+  const applyPreset = (preset: (typeof presets)[number]) => {
+    updateScene({
+      preset: preset.name,
+      movement: preset.movement,
+      startZoom: preset.startZoom,
+      zoom: preset.zoom,
+      rotation: preset.rotation,
+      speed: preset.speed,
+      smoothness: preset.smoothness
+    });
+  };
+
   let cursor = 0;
+  let activeScene: Scene | undefined;
+  let sceneStart = 0;
 
-  const activeScene = scenes.find(scene => {
-    const found = time < cursor + scene.duration;
+  for (const scene of scenes) {
+    if (time < cursor + scene.duration) {
+      activeScene = scene;
+      sceneStart = cursor;
+      break;
+    }
+
     cursor += scene.duration;
-    return found;
-  }) || scenes[scenes.length - 1];
+  }
 
-  const sceneStart = activeScene
-    ? scenes
-        .slice(0, scenes.indexOf(activeScene))
-        .reduce((sum, scene) => sum + scene.duration, 0)
+  if (!activeScene && scenes.length) {
+    activeScene = scenes[scenes.length - 1];
+    sceneStart = total - activeScene.duration;
+  }
+
+  const localTime = activeScene
+    ? clamp(time - sceneStart, 0, activeScene.duration)
     : 0;
-
-  const localTime = activeScene ? time - sceneStart : 0;
 
   const progress = activeScene
-    ? Math.min(localTime / activeScene.duration, 1)
+    ? clamp(localTime / activeScene.duration, 0, 1)
     : 0;
+
+  const eased = activeScene
+    ? progress < 0.5
+      ? (1 -
+          Math.pow(
+            1 - progress * 2,
+            activeScene.smoothness / 25 + 1
+          )) / 2
+      : 1 -
+        (1 -
+          Math.pow(
+            1 - (progress - 0.5) * 2,
+            activeScene.smoothness / 25 + 1
+          )) / 2
+    : 0;
+
+  const cameraProgress =
+    activeScene?.loop
+      ? (1 - Math.cos(progress * Math.PI * 2)) / 2
+      : eased;
+
+  const cameraZoom = activeScene
+    ? activeScene.startZoom +
+      (activeScene.zoom - activeScene.startZoom) *
+        cameraProgress
+    : 1;
+
+  const cameraRotation = activeScene
+    ? activeScene.rotation *
+      (activeScene.loop
+        ? Math.sin(progress * Math.PI * 2)
+        : progress)
+    : 0;
+
+  let offsetX = 0;
+  let offsetY = 0;
+
+  if (activeScene) {
+    const amount = cameraProgress * 2 - 1;
+
+    switch (activeScene.movement) {
+      case 'right':
+        offsetX = -amount * 2;
+        break;
+      case 'left':
+        offsetX = amount * 2;
+        break;
+      case 'up':
+        offsetY = amount * 2;
+        break;
+      case 'down':
+        offsetY = -amount * 2;
+        break;
+      case 'orbit':
+        offsetX = Math.sin(progress * Math.PI * 2) * 2;
+        offsetY = Math.cos(progress * Math.PI * 2) * 2;
+        break;
+      case 'handheld':
+        offsetX =
+          Math.sin(time * 9 * activeScene.speed) * 0.8;
+        offsetY =
+          Math.cos(time * 12 * activeScene.speed) * 0.8;
+        break;
+      case 'push':
+      case 'pull':
+        break;
+    }
+  }
 
   const saveProject = () => {
     const project = {
+      version: 2,
       projectName,
       scenes: scenes.map(({ image, ...scene }) => scene)
     };
@@ -158,6 +356,15 @@ export default function App() {
     setProjectName('Untitled Film');
   };
 
+  const downloadCurrentImage = () => {
+    if (!activeScene) return;
+
+    const anchor = document.createElement('a');
+    anchor.href = activeScene.image;
+    anchor.download = `${activeScene.name || 'scene'}.png`;
+    anchor.click();
+  };
+
   return (
     <main className="studio">
       <header className="topbar">
@@ -170,7 +377,7 @@ export default function App() {
             <strong>
               CINEMATIC<span> STUDIO</span>
             </strong>
-            <small>CREATIVE MOTION ENGINE</small>
+            <small>ADVANCED CAMERA ENGINE</small>
           </div>
         </div>
 
@@ -231,6 +438,14 @@ export default function App() {
             <ImagePlus />
             <span>Import</span>
           </button>
+
+          <button
+            className="rail-item"
+            onClick={downloadCurrentImage}
+          >
+            <Download />
+            <span>Capture</span>
+          </button>
         </aside>
 
         <section className="editor">
@@ -251,13 +466,18 @@ export default function App() {
                 <>
                   <img
                     key={activeScene.id}
-                    className={`preview-image move-${activeScene.movement}`}
+                    className="preview-image"
                     src={activeScene.image}
                     alt={activeScene.name}
                     style={{
-                      transform: `scale(${
-                        1 + (activeScene.zoom - 1) * progress
-                      })`
+                      transform: [
+                        `translate(${offsetX}%, ${offsetY}%)`,
+                        `scale(${cameraZoom})`,
+                        `rotate(${cameraRotation}deg)`
+                      ].join(' '),
+                      transition: playing
+                        ? 'none'
+                        : 'transform 0.12s ease-out'
                     }}
                   />
 
@@ -270,7 +490,13 @@ export default function App() {
                   )}
 
                   <div className="preview-label">
-                    SCENE {scenes.indexOf(activeScene) + 1}
+                    SCENE{' '}
+                    {scenes.indexOf(activeScene) + 1}
+                  </div>
+
+                  <div className="camera-readout">
+                    <Camera size={12} />
+                    {cameraZoom.toFixed(2)}×
                   </div>
                 </>
               ) : (
@@ -393,7 +619,7 @@ export default function App() {
         <aside className="inspector">
           <div className="inspector-heading">
             <Sparkles size={17} />
-            <strong>SCENE CONTROLS</strong>
+            <strong>CAMERA ENGINE</strong>
           </div>
 
           {current ? (
@@ -410,46 +636,83 @@ export default function App() {
               </div>
 
               <div className="property-group">
-                <label>CAMERA MOTION</label>
+                <label>
+                  <Clapperboard size={14} />
+                  CINEMATIC PRESETS
+                </label>
+
+                <div className="preset-grid">
+                  {presets.map(preset => (
+                    <button
+                      key={preset.name}
+                      className={
+                        current.preset === preset.name
+                          ? 'preset-active'
+                          : ''
+                      }
+                      onClick={() => applyPreset(preset)}
+                    >
+                      <Sparkles size={13} />
+                      {preset.name}
+                    </button>
+                  ))}
+                </div>
+              </div>
+
+              <div className="property-group">
+                <label>CAMERA MOVEMENT</label>
 
                 <div className="motion-grid">
-                  {['right', 'left', 'up', 'down'].map(
-                    movement => (
-                      <button
-                        key={movement}
-                        className={
-                          current.movement === movement
-                            ? 'motion-active'
-                            : ''
-                        }
-                        onClick={() =>
-                          updateScene({ movement })
-                        }
-                      >
-                        <MoveHorizontal size={15} />
-                        {movement.toUpperCase()}
-                      </button>
-                    )
-                  )}
+                  {(
+                    [
+                      'right',
+                      'left',
+                      'up',
+                      'down',
+                      'push',
+                      'pull',
+                      'orbit',
+                      'handheld'
+                    ] as Movement[]
+                  ).map(movement => (
+                    <button
+                      key={movement}
+                      className={
+                        current.movement === movement
+                          ? 'motion-active'
+                          : ''
+                      }
+                      onClick={() =>
+                        updateScene({
+                          movement,
+                          preset: 'Custom'
+                        })
+                      }
+                    >
+                      <MoveHorizontal size={14} />
+                      {movement.toUpperCase()}
+                    </button>
+                  ))}
                 </div>
               </div>
 
               <div className="property-group">
                 <label>
                   <ZoomIn size={13} />
-                  CAMERA ZOOM
-                  <span>{current.zoom.toFixed(2)}×</span>
+                  START ZOOM
+                  <span>{current.startZoom.toFixed(2)}×</span>
                 </label>
 
                 <input
                   type="range"
                   min="1"
-                  max="1.6"
+                  max="2"
                   step="0.01"
-                  value={current.zoom}
+                  value={current.startZoom}
                   onChange={event =>
                     updateScene({
-                      zoom: Number(event.target.value)
+                      startZoom: Number(event.target.value),
+                      preset: 'Custom'
                     })
                   }
                 />
@@ -457,7 +720,94 @@ export default function App() {
 
               <div className="property-group">
                 <label>
-                  DURATION
+                  <ZoomIn size={13} />
+                  END ZOOM
+                  <span>{current.zoom.toFixed(2)}×</span>
+                </label>
+
+                <input
+                  type="range"
+                  min="1"
+                  max="2"
+                  step="0.01"
+                  value={current.zoom}
+                  onChange={event =>
+                    updateScene({
+                      zoom: Number(event.target.value),
+                      preset: 'Custom'
+                    })
+                  }
+                />
+              </div>
+
+              <div className="property-group">
+                <label>
+                  <Gauge size={13} />
+                  MOVEMENT SPEED
+                  <span>{current.speed.toFixed(1)}×</span>
+                </label>
+
+                <input
+                  type="range"
+                  min="0.2"
+                  max="2.5"
+                  step="0.1"
+                  value={current.speed}
+                  onChange={event =>
+                    updateScene({
+                      speed: Number(event.target.value),
+                      preset: 'Custom'
+                    })
+                  }
+                />
+              </div>
+
+              <div className="property-group">
+                <label>
+                  <RotateCw size={13} />
+                  CAMERA ROTATION
+                  <span>{current.rotation}°</span>
+                </label>
+
+                <input
+                  type="range"
+                  min="-15"
+                  max="15"
+                  step="0.5"
+                  value={current.rotation}
+                  onChange={event =>
+                    updateScene({
+                      rotation: Number(event.target.value),
+                      preset: 'Custom'
+                    })
+                  }
+                />
+              </div>
+
+              <div className="property-group">
+                <label>
+                  MOTION SMOOTHNESS
+                  <span>{current.smoothness}%</span>
+                </label>
+
+                <input
+                  type="range"
+                  min="10"
+                  max="100"
+                  step="5"
+                  value={current.smoothness}
+                  onChange={event =>
+                    updateScene({
+                      smoothness: Number(event.target.value),
+                      preset: 'Custom'
+                    })
+                  }
+                />
+              </div>
+
+              <div className="property-group">
+                <label>
+                  SCENE DURATION
                   <span>{current.duration}s</span>
                 </label>
 
@@ -473,6 +823,19 @@ export default function App() {
                   }
                 />
               </div>
+
+              <button
+                className={`loop-control ${
+                  current.loop ? 'loop-active' : ''
+                }`}
+                onClick={() =>
+                  updateScene({ loop: !current.loop })
+                }
+              >
+                <Repeat2 size={16} />
+                LOOP CAMERA MOVEMENT
+                <span>{current.loop ? 'ON' : 'OFF'}</span>
+              </button>
 
               {showText && (
                 <div className="property-group">
@@ -515,7 +878,7 @@ export default function App() {
               <ImagePlus size={27} />
 
               <p>
-                Import an image to unlock scene controls.
+                Import an image to unlock the camera engine.
               </p>
 
               <button
@@ -528,11 +891,11 @@ export default function App() {
 
           <div className="engine-status">
             <span>
-              <i /> RENDER ENGINE
+              <i /> CAMERA ENGINE
             </span>
 
             <strong>READY</strong>
-            <small>CLIENT-SIDE PREVIEW</small>
+            <small>2D IMAGE ANIMATION</small>
           </div>
         </aside>
       </section>
@@ -544,7 +907,7 @@ export default function App() {
         </span>
 
         <span>1080 × 1920 TARGET</span>
-        <span>BUILD 0.1.0</span>
+        <span>BUILD 0.2.0</span>
       </footer>
 
       <input
@@ -560,4 +923,4 @@ export default function App() {
       />
     </main>
   );
-                }
+                    }
