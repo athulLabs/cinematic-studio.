@@ -99,6 +99,25 @@ export default function App() {
     : 0;
 
   const progress = total > 0 ? (time / total) * 100 : 0;
+  // Animate camera movement from the timeline clock so scrubbing and playback match.
+  const cameraProgress = current
+    ? clamp(localTime / Math.max(current.duration, 0.1), 0, 1)
+    : 0;
+  const cameraEase = cameraProgress * cameraProgress * (3 - 2 * cameraProgress);
+  const cameraX = current?.motion === "left"
+    ? 4 - cameraEase * 8
+    : current?.motion === "right"
+      ? -4 + cameraEase * 8
+      : 0;
+  const cameraY = current?.motion === "up"
+    ? 4 - cameraEase * 8
+    : current?.motion === "down"
+      ? -4 + cameraEase * 8
+      : 0;
+  const animatedZoom = current
+    ? 1 + (current.zoom - 1) * cameraEase
+    : 1;
+  const animatedRotation = current ? current.rotation * cameraEase : 0;
 
   const notify = (message: string) => {
     setNotice(message);
@@ -547,13 +566,11 @@ export default function App() {
               <div className="preview-stage">
                 <img
                   key={current.id}
-                  className={`preview-image motion-${movementClass}`}
+                  className="preview-image"
                   src={current.image}
                   alt={current.name}
                   style={{
-                    transform: `scale(${current.zoom}) rotate(${current.rotation}deg)`,
-                    animationDuration: `${Math.max(current.duration, 0.1)}s`,
-                    animationPlayState: playing ? "running" : "paused",
+                    transform: `translate(${cameraX}%, ${cameraY}%) scale(${animatedZoom}) rotate(${animatedRotation}deg)`,
                   }}
                 />
 
@@ -577,7 +594,7 @@ export default function App() {
                 )}
 
                 <div className="camera-readout">
-                  {current.zoom.toFixed(2)}×
+                  {animatedZoom.toFixed(2)}×
                 </div>
               </div>
             ) : (
@@ -772,7 +789,7 @@ export default function App() {
                 <label>
                   <ZoomIn size={13} />
                   <span>CAMERA ZOOM</span>
-                  <span className="value">{current.zoom.toFixed(2)}×</span>
+                  <span className="value">{animatedZoom.toFixed(2)}×</span>
                 </label>
 
                 <input
@@ -976,4 +993,5 @@ export default function App() {
 
 function SparkleIcon() {
   return <Clapperboard size={17} />;
-                  }
+
+    }
