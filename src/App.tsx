@@ -12,8 +12,7 @@ import {
   Sparkles,
   ZoomIn,
   MoveHorizontal,
-  Film,
-  RotateCcw
+  Film
 } from 'lucide-react';
 
 type Scene = {
@@ -142,7 +141,11 @@ export default function App() {
   };
 
   const newProject = () => {
-    if (!window.confirm('Start a new project? Unsaved changes may be lost.')) {
+    if (
+      !window.confirm(
+        'Start a new project? Unsaved changes may be lost.'
+      )
+    ) {
       return;
     }
 
@@ -193,7 +196,9 @@ export default function App() {
           <input
             className="project-name"
             value={projectName}
-            onChange={event => setProjectName(event.target.value)}
+            onChange={event =>
+              setProjectName(event.target.value)
+            }
             aria-label="Project name"
           />
         </div>
@@ -235,7 +240,9 @@ export default function App() {
               LIVE COMPOSITION
             </div>
 
-            <span className="resolution">9:16 / VERTICAL</span>
+            <span className="resolution">
+              9:16 / VERTICAL
+            </span>
           </div>
 
           <div className="preview-stage">
@@ -263,8 +270,7 @@ export default function App() {
                   )}
 
                   <div className="preview-label">
-                    SCENE{' '}
-                    {scenes.indexOf(activeScene) + 1}
+                    SCENE {scenes.indexOf(activeScene) + 1}
                   </div>
                 </>
               ) : (
@@ -348,11 +354,16 @@ export default function App() {
                   }`}
                   onClick={() => {
                     setSelected(scene.id);
+
                     setTime(
                       scenes
                         .slice(0, index)
-                        .reduce((sum, item) => sum + item.duration, 0)
+                        .reduce(
+                          (sum, item) => sum + item.duration,
+                          0
+                        )
                     );
+
                     setPlaying(false);
                   }}
                 >
@@ -402,20 +413,24 @@ export default function App() {
                 <label>CAMERA MOTION</label>
 
                 <div className="motion-grid">
-                  {['right', 'left', 'up', 'down'].map(movement => (
-                    <button
-                      key={movement}
-                      className={
-                        current.movement === movement
-                          ? 'motion-active'
-                          : ''
-                      }
-                      onClick={() => updateScene({ movement })}
-                    >
-                      <MoveHorizontal size={15} />
-                      {movement.toUpperCase()}
-                    </button>
-                  ))}
+                  {['right', 'left', 'up', 'down'].map(
+                    movement => (
+                      <button
+                        key={movement}
+                        className={
+                          current.movement === movement
+                            ? 'motion-active'
+                            : ''
+                        }
+                        onClick={() =>
+                          updateScene({ movement })
+                        }
+                      >
+                        <MoveHorizontal size={15} />
+                        {movement.toUpperCase()}
+                      </button>
+                    )
+                  )}
                 </div>
               </div>
 
@@ -433,7 +448,9 @@ export default function App() {
                   step="0.01"
                   value={current.zoom}
                   onChange={event =>
-                    updateScene({ zoom: Number(event.target.value) })
+                    updateScene({
+                      zoom: Number(event.target.value)
+                    })
                   }
                 />
               </div>
@@ -450,7 +467,9 @@ export default function App() {
                   max="20"
                   value={current.duration}
                   onChange={event =>
-                    updateScene({ duration: Number(event.target.value) })
+                    updateScene({
+                      duration: Number(event.target.value)
+                    })
                   }
                 />
               </div>
@@ -478,7 +497,9 @@ export default function App() {
                   URL.revokeObjectURL(current.image);
 
                   setScenes(previous =>
-                    previous.filter(scene => scene.id !== current.id)
+                    previous.filter(
+                      scene => scene.id !== current.id
+                    )
                   );
 
                   setSelected('');
@@ -493,9 +514,13 @@ export default function App() {
             <div className="inspector-empty">
               <ImagePlus size={27} />
 
-              <p>Import an image to unlock scene controls.</p>
+              <p>
+                Import an image to unlock scene controls.
+              </p>
 
-              <button onClick={() => fileRef.current?.click()}>
+              <button
+                onClick={() => fileRef.current?.click()}
+              >
                 IMPORT IMAGE
               </button>
             </div>
@@ -535,4 +560,4 @@ export default function App() {
       />
     </main>
   );
-               }
+                }
