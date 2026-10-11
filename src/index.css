@@ -1205,3 +1205,49 @@ input[type="range"]::-moz-range-thumb {
     grid-template-columns: 1fr;
   }
 }
+
+
+/* Scene transitions: layered image crossfades and fade-to-black overlay */
+.transition-previous-image,
+.transition-blackout {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  pointer-events: none;
+}
+.transition-previous-image {
+  z-index: 2;
+  transform-origin: center;
+  will-change: opacity, transform;
+}
+.transition-blackout {
+  z-index: 3;
+  background: #000;
+}
+.preview-vignette {
+  z-index: 4;
+}
+.preview-label,
+.preview-caption,
+.camera-readout {
+  z-index: 5;
+}
+.transition-controls .transition-select {
+  width: 100%;
+  min-height: 42px;
+}
+.transition-duration-label {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-top: 10px;
+}
+.control-hint {
+  display: block;
+  margin-top: 6px;
+  color: var(--muted, #8994a8);
+  font-size: 11px;
+  line-height: 1.4;
+}
