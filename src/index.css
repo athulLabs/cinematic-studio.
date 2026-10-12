@@ -1251,3 +1251,54 @@ input[type="range"]::-moz-range-thumb {
   font-size: 11px;
   line-height: 1.4;
 }
+
+
+/* Expanded feature navigation rail */
+.workspace {
+  min-width: 0;
+}
+.sidebar {
+  align-items: center;
+  gap: 6px;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  scrollbar-width: thin;
+  padding: 10px 6px;
+}
+.sidebar .nav-item {
+  flex: 0 0 auto;
+  min-height: 62px;
+  width: 100%;
+  padding: 8px 3px;
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  align-items: center;
+  gap: 5px;
+  font-size: 10px;
+  line-height: 1.1;
+  text-align: center;
+  overflow-wrap: anywhere;
+}
+.sidebar-divider {
+  width: 70%;
+  height: 1px;
+  flex: 0 0 1px;
+  margin: 4px 0;
+  background: var(--border, rgba(140, 160, 190, .22));
+}
+.sidebar .nav-item-planned {
+  opacity: .66;
+}
+@media (max-width: 760px) {
+  .workspace {
+    grid-template-columns: 66px minmax(0, 1fr);
+  }
+  .sidebar {
+    padding: 8px 4px;
+  }
+  .sidebar .nav-item {
+    min-height: 60px;
+    font-size: 9px;
+  }
+}
