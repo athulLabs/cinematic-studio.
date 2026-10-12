@@ -15,7 +15,7 @@ import {
   Film,
   Save,
   Upload,
-  RotateCw,
+  ,
   Maximize2,
   Clapperboard,
   Check,
@@ -832,20 +832,26 @@ export default function App() {
       </section>
 
       <div className="workspace">
-        <aside className="sidebar">
+        <aside className="sidebar" aria-label="Studio tools">
           <button
             className={activeTab === "scenes" ? "nav-item active" : "nav-item"}
-            onClick={() => setActiveTab("scenes")}
+            onClick={() => {
+              setActiveTab("scenes");
+              document.querySelector(".timeline")?.scrollIntoView({ behavior: "smooth", block: "start" });
+            }}
+            title="Scenes and timeline"
           >
             <Layers size={19} />
             <span>Scenes</span>
           </button>
 
           <button
-            className={
-              activeTab === "typography" ? "nav-item active" : "nav-item"
-            }
-            onClick={() => setActiveTab("typography")}
+            className={activeTab === "typography" ? "nav-item active" : "nav-item"}
+            onClick={() => {
+              setActiveTab("typography");
+              document.querySelector(".text-area")?.scrollIntoView({ behavior: "smooth", block: "center" });
+            }}
+            title="Text and captions"
           >
             <Type size={19} />
             <span>Type</span>
@@ -857,9 +863,64 @@ export default function App() {
               setActiveTab("import");
               fileRef.current?.click();
             }}
+            title="Import images"
           >
             <ImagePlus size={19} />
             <span>Import</span>
+          </button>
+
+          <div className="sidebar-divider" />
+
+          <button className="nav-item" onClick={() => document.querySelector(".movement-grid")?.scrollIntoView({ behavior: "smooth", block: "center" })} title="Camera motion">
+            <MoveHorizontal size={19} />
+            <span>Motion</span>
+          </button>
+
+          <button className="nav-item" onClick={() => document.querySelector(".effects-grid")?.scrollIntoView({ behavior: "smooth", block: "center" })} title="Visual effects">
+            <Aperture size={19} />
+            <span>Effects</span>
+          </button>
+
+          <button className="nav-item" onClick={() => document.querySelector(".transition-controls")?.scrollIntoView({ behavior: "smooth", block: "center" })} title="Scene transitions">
+            <Film size={19} />
+            <span>Transitions</span>
+          </button>
+
+          <button className="nav-item" onClick={() => document.querySelector(".timeline")?.scrollIntoView({ behavior: "smooth", block: "start" })} title="Timeline">
+            <Clapperboard size={19} />
+            <span>Timeline</span>
+          </button>
+
+          <button className="nav-item" onClick={() => document.querySelector(".fine-controls-grid")?.scrollIntoView({ behavior: "smooth", block: "center" })} title="Camera and keyframe controls">
+            <MoveHorizontal size={19} />
+            <span>Camera</span>
+          </button>
+
+          <button className="nav-item" onClick={() => document.querySelector(".project-actions")?.scrollIntoView({ behavior: "smooth", block: "center" })} title="Save and open project">
+            <Save size={19} />
+            <span>Project</span>
+          </button>
+
+          <button className="nav-item" onClick={() => document.querySelector(".scene-actions")?.scrollIntoView({ behavior: "smooth", block: "center" })} title="Export frames and video">
+            <Download size={19} />
+            <span>Export</span>
+          </button>
+
+          <div className="sidebar-divider" />
+
+          <button className="nav-item nav-item-planned" onClick={() => notify("Keyframe animation is planned for the next engine upgrade.")} title="Keyframes — planned">
+            <Film size={19} />
+            <span>Keyframes</span>
+          </button>
+
+          <button className="nav-item nav-item-planned" onClick={() => notify("Audio tracks are planned for a future upgrade.")} title="Audio — planned">
+            <Aperture size={19} />
+            <span>Audio</span>
+          </button>
+
+          <button className="nav-item nav-item-planned" onClick={() => notify("Motion presets are planned for a future upgrade.")} title="Presets — planned">
+            <Layers size={19} />
+            <span>Presets</span>
           </button>
         </aside>
 
