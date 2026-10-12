@@ -15,7 +15,7 @@ import {
   Film,
   Save,
   Upload,
-  ,
+  
   Maximize2,
   Clapperboard,
   Check,
