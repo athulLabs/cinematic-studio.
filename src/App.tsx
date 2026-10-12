@@ -563,50 +563,73 @@ export default function App() {
         }
       };
 
+      // Draw on a fixed timer rather than relying on requestAnimationFrame.
+      // Some mobile browsers throttle animation frames during long exports,
+      // which can leave the recording containing only its opening scene.
+      const renderScenes = loaded.filter((item) => item.scene.image && item.img.naturalWidth > 0);
+      if (!renderScenes.length) {
+        throw new Error("No scene images could be loaded for export");
+      }
+
+      const exportDuration = renderScenes.reduce(
+        (sum, item) => sum + Math.max(0.1, item.scene.duration),
+        0
+      );
+      const frameRate = 30;
+      const frameInterval = 1000 / frameRate;
+      const totalFrames = Math.max(1, Math.ceil(exportDuration * frameRate));
+
+      // Draw the opening frame before starting the recorder so the first
+      // recorded frame is valid, then keep drawing across every scene.
+      const drawAtTime = (elapsedSeconds: number) => {
+        let cursor = 0;
+        let entryIndex = renderScenes.length - 1;
+        let local = Math.max(0, renderScenes[entryIndex].scene.duration);
+        for (let index = 0; index < renderScenes.length; index++) {
+          const item = renderScenes[index];
+          const duration = Math.max(0.1, item.scene.duration);
+          if (elapsedSeconds < cursor + duration) {
+            entryIndex = index;
+            local = Math.max(0, elapsedSeconds - cursor);
+            break;
+          }
+          cursor += duration;
+        }
+
+        const entry = renderScenes[entryIndex];
+        const transitionDuration = Math.max(0.1, entry.scene.transitionDuration || 0.8);
+        const transitionProgress = clamp(local / transitionDuration, 0, 1);
+        const isTransitioning = entryIndex > 0 &&
+          entry.scene.transition !== "cut" &&
+          local < transitionDuration;
+        const previousImage = entryIndex > 0 ? renderScenes[entryIndex - 1].img : undefined;
+
+        drawSceneFrame(
+          entry.scene,
+          entry.img,
+          clamp(local / Math.max(entry.scene.duration, 0.1), 0, 1),
+          isTransitioning
+            ? { type: entry.scene.transition, progress: transitionProgress, previousImage }
+            : undefined
+        );
+      };
+
+      drawAtTime(0);
       recorder.start(250);
-      const startAt = performance.now();
-      const fullDurationMs = Math.max(1, total) * 1000;
       await new Promise<void>((resolve) => {
-        const draw = (now: number) => {
-          const elapsed = Math.min(now - startAt, fullDurationMs);
-          let cursor = 0;
-          let entry = loaded[loaded.length - 1];
-          let entryIndex = loaded.length - 1;
-          let local = entry.scene.duration;
-          for (let index = 0; index < loaded.length; index++) {
-            const item = loaded[index];
-            if (elapsed / 1000 < cursor + item.scene.duration) {
-              entry = item;
-              entryIndex = index;
-              local = elapsed / 1000 - cursor;
-              break;
-            }
-            cursor += item.scene.duration;
+        const startAt = performance.now();
+        let frameIndex = 0;
+        const timer = window.setInterval(() => {
+          frameIndex += 1;
+          const elapsedSeconds = Math.min(frameIndex / frameRate, exportDuration);
+          drawAtTime(elapsedSeconds);
+
+          if (frameIndex >= totalFrames) {
+            window.clearInterval(timer);
+            // Give the final frame time to enter the recorder before stopping.
+            window.setTimeout(resolve, 250);
           }
-          const transitionProgress = clamp(
-            local / Math.max(0.1, entry.scene.transitionDuration || 0.8),
-            0,
-            1
-          );
-          const isTransitioning = entryIndex > 0 &&
-            entry.scene.transition !== "cut" &&
-            local < (entry.scene.transitionDuration || 0.8);
-          const previousImage = entryIndex > 0 ? loaded[entryIndex - 1].img : undefined;
-          drawSceneFrame(
-            entry.scene,
-            entry.img,
-            clamp(local / Math.max(entry.scene.duration, 0.1), 0, 1),
-            isTransitioning
-              ? { type: entry.scene.transition, progress: transitionProgress, previousImage }
-              : undefined
-          );
-          if (elapsed >= fullDurationMs) {
-            window.setTimeout(resolve, 180);
-          } else {
-            requestAnimationFrame(draw);
-          }
-        };
-        requestAnimationFrame(draw);
+        }, frameInterval);
       });
       recorder.stop();
       let recorded = await finished;
