@@ -459,12 +459,15 @@ export default function App() {
         return { scene, img };
       }));
 
+      // Prefer WebM for the browser recording stage. Some Android browsers
+      // report MP4 support but produce truncated recordings from canvas streams.
+      // Convert the complete WebM to MP4 below when FFmpeg is available.
       const supportedMime = [
+        "video/webm;codecs=vp8",
+        "video/webm;codecs=vp9",
+        "video/webm",
         "video/mp4;codecs=h264",
         "video/mp4",
-        "video/webm;codecs=vp9",
-        "video/webm;codecs=vp8",
-        "video/webm",
       ].find((mime) => MediaRecorder.isTypeSupported(mime));
 
       if (!supportedMime) throw new Error("This browser has no supported video recording format");
@@ -508,27 +511,6 @@ export default function App() {
           if (scene.motion3D === "float") rx = Math.sin(progress * Math.PI * 2) * 3;
           if (scene.motion3D === "dolly") z = ease * 0.18;
 
-          // Draw the outgoing scene first in canvas coordinates. Previously it
-          // was drawn after translating the canvas origin to the center, which
-          // misplaced the old frame and produced overlapping/ghosted textures.
-          if (
-            transition?.previousImage?.naturalWidth &&
-            (transition.type === "dissolve" || transition.type === "zoom")
-          ) {
-            const oldImg = transition.previousImage;
-            const oldScale = Math.max(width / oldImg.naturalWidth, height / oldImg.naturalHeight);
-            ctx.save();
-            ctx.globalAlpha = 1 - transition.progress;
-            ctx.drawImage(
-              oldImg,
-              (width - oldImg.naturalWidth * oldScale) / 2,
-              (height - oldImg.naturalHeight * oldScale) / 2,
-              oldImg.naturalWidth * oldScale,
-              oldImg.naturalHeight * oldScale
-            );
-            ctx.restore();
-          }
-
           ctx.save();
           ctx.translate(width / 2, height / 2);
           ctx.rotate((scene.rotation * ease * Math.PI) / 180);
@@ -539,10 +521,25 @@ export default function App() {
             : scene.effect === "dream" ? "saturate(1.25) brightness(1.06)"
             : scene.effect === "cinematic" ? "contrast(1.08) saturate(.88)" : "none";
           ctx.filter = filter;
-          ctx.globalAlpha = transition?.type === "dissolve" || transition?.type === "zoom"
-            ? transition.progress
-            : 1;
+          ctx.globalAlpha = transition?.type === "dissolve" ? transition.progress : 1;
           ctx.drawImage(img, -dw / 2 + pan * width, -dh / 2 + panY * height, dw, dh);
+          ctx.globalAlpha = 1;
+          if (
+            transition?.previousImage?.naturalWidth &&
+            (transition.type === "dissolve" || transition.type === "zoom")
+          ) {
+            const oldImg = transition.previousImage;
+            const oldScale = Math.max(width / oldImg.naturalWidth, height / oldImg.naturalHeight);
+            ctx.globalAlpha = 1 - transition.progress;
+            ctx.drawImage(
+              oldImg,
+              (width - oldImg.naturalWidth * oldScale) / 2,
+              (height - oldImg.naturalHeight * oldScale) / 2,
+              oldImg.naturalWidth * oldScale,
+              oldImg.naturalHeight * oldScale
+            );
+            ctx.globalAlpha = 1;
+          }
           ctx.restore();
         }
 
@@ -621,20 +618,30 @@ export default function App() {
       };
 
       drawAtTime(0);
-      recorder.start(250);
+      recorder.start(1000);
+
+      // Drive the render from elapsed wall-clock time, not frame count. If
+      // Android slows canvas drawing, the render still advances through the
+      // entire timeline instead of stopping after a small number of frames.
       await new Promise<void>((resolve) => {
-        let frameIndex = 0;
-        const timer = window.setInterval(() => {
-          frameIndex += 1;
-          const elapsedSeconds = Math.min(frameIndex / frameRate, exportDuration);
+        const startTime = performance.now();
+        let timer = 0;
+        const renderNextFrame = () => {
+          const elapsedMs = performance.now() - startTime;
+          const elapsedSeconds = Math.min(elapsedMs / 1000, exportDuration);
           drawAtTime(elapsedSeconds);
 
-          if (frameIndex >= totalFrames) {
-            window.clearInterval(timer);
-            // Give the final frame time to enter the recorder before stopping.
-            window.setTimeout(resolve, 250);
+          if (elapsedSeconds >= exportDuration) {
+            // Allow the final frame to be recorded before stopping.
+            window.setTimeout(resolve, 500);
+            return;
           }
-        }, frameInterval);
+
+          timer = window.setTimeout(renderNextFrame, frameInterval);
+        };
+        timer = window.setTimeout(renderNextFrame, frameInterval);
+        // Keep a reference for cleanup if this render is interrupted.
+        void timer;
       });
       recorder.stop();
       let recorded = await finished;
@@ -1514,5 +1521,4 @@ export default function App() {
 
 function SparkleIcon() {
   return <Clapperboard size={17} />;
-
-              }
+                  }
