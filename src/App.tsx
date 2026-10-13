@@ -580,7 +580,6 @@ export default function App() {
       );
       const frameRate = 30;
       const frameInterval = 1000 / frameRate;
-      const totalFrames = Math.max(1, Math.ceil(exportDuration * frameRate));
 
       // Draw the opening frame before starting the recorder so the first
       // recorded frame is valid, then keep drawing across every scene.
