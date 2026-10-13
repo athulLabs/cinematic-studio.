@@ -508,6 +508,27 @@ export default function App() {
           if (scene.motion3D === "float") rx = Math.sin(progress * Math.PI * 2) * 3;
           if (scene.motion3D === "dolly") z = ease * 0.18;
 
+          // Draw the outgoing scene first in canvas coordinates. Previously it
+          // was drawn after translating the canvas origin to the center, which
+          // misplaced the old frame and produced overlapping/ghosted textures.
+          if (
+            transition?.previousImage?.naturalWidth &&
+            (transition.type === "dissolve" || transition.type === "zoom")
+          ) {
+            const oldImg = transition.previousImage;
+            const oldScale = Math.max(width / oldImg.naturalWidth, height / oldImg.naturalHeight);
+            ctx.save();
+            ctx.globalAlpha = 1 - transition.progress;
+            ctx.drawImage(
+              oldImg,
+              (width - oldImg.naturalWidth * oldScale) / 2,
+              (height - oldImg.naturalHeight * oldScale) / 2,
+              oldImg.naturalWidth * oldScale,
+              oldImg.naturalHeight * oldScale
+            );
+            ctx.restore();
+          }
+
           ctx.save();
           ctx.translate(width / 2, height / 2);
           ctx.rotate((scene.rotation * ease * Math.PI) / 180);
@@ -518,25 +539,10 @@ export default function App() {
             : scene.effect === "dream" ? "saturate(1.25) brightness(1.06)"
             : scene.effect === "cinematic" ? "contrast(1.08) saturate(.88)" : "none";
           ctx.filter = filter;
-          ctx.globalAlpha = transition?.type === "dissolve" ? transition.progress : 1;
+          ctx.globalAlpha = transition?.type === "dissolve" || transition?.type === "zoom"
+            ? transition.progress
+            : 1;
           ctx.drawImage(img, -dw / 2 + pan * width, -dh / 2 + panY * height, dw, dh);
-          ctx.globalAlpha = 1;
-          if (
-            transition?.previousImage?.naturalWidth &&
-            (transition.type === "dissolve" || transition.type === "zoom")
-          ) {
-            const oldImg = transition.previousImage;
-            const oldScale = Math.max(width / oldImg.naturalWidth, height / oldImg.naturalHeight);
-            ctx.globalAlpha = 1 - transition.progress;
-            ctx.drawImage(
-              oldImg,
-              (width - oldImg.naturalWidth * oldScale) / 2,
-              (height - oldImg.naturalHeight * oldScale) / 2,
-              oldImg.naturalWidth * oldScale,
-              oldImg.naturalHeight * oldScale
-            );
-            ctx.globalAlpha = 1;
-          }
           ctx.restore();
         }
 
@@ -1508,4 +1514,5 @@ export default function App() {
 
 function SparkleIcon() {
   return <Clapperboard size={17} />;
-                  }
+
+                                                  }
