@@ -1515,4 +1515,4 @@ export default function App() {
 function SparkleIcon() {
   return <Clapperboard size={17} />;
 
-                                                  }
+              }
