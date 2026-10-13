@@ -617,7 +617,6 @@ export default function App() {
       drawAtTime(0);
       recorder.start(250);
       await new Promise<void>((resolve) => {
-        const startAt = performance.now();
         let frameIndex = 0;
         const timer = window.setInterval(() => {
           frameIndex += 1;
@@ -1509,4 +1508,4 @@ export default function App() {
 
 function SparkleIcon() {
   return <Clapperboard size={17} />;
-  }
+                  }
